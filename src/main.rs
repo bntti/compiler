@@ -1,3 +1,6 @@
+mod compiler;
+mod tokenizer;
+
 use base64::prelude::*;
 use clap::Parser;
 use serde_json::{json, Value};
@@ -33,10 +36,6 @@ struct Args {
     port: u32,
 }
 
-fn call_compiler(_source_code: String) -> String {
-    unimplemented!()
-}
-
 fn read_source(input_file: Option<String>) -> String {
     match input_file {
         Some(input_file) => fs::read_to_string(&input_file)
@@ -63,7 +62,7 @@ fn run_server(host: String, port: u32) {
         let mut result = json!({});
         if request["command"] == "compile" {
             let source_code = &request["code"].as_str().unwrap();
-            let assembly = call_compiler(source_code.to_string());
+            let assembly = compiler::compile(source_code.to_string());
             let base64 = BASE64_STANDARD.encode(assembly);
             result["program"] = Value::String(base64);
         } else if request["command"] != "ping" {
@@ -80,7 +79,7 @@ fn main() {
     match args.command {
         Command::Compile => {
             let source_code = read_source(args.input_file);
-            let assembly = call_compiler(source_code);
+            let assembly = compiler::compile(source_code);
             println!("{assembly}");
             todo!("Write assembly to output file")
         }
