@@ -76,22 +76,6 @@ pub fn tokenize(source_code: String) -> Vec<Token> {
         // End of ignored matches
 
         let col_num = i - last_newline + 1;
-        // // Inoptimal way of finding the col_num?
-        // let col_num = match last_newline {
-        //     Some(index) => i - index + 1,
-        //     None => {
-        //         // Find last newline character
-        //         let mut index = 0;
-        //         for j in i - 1..0 {
-        //             if code_chars.nth(j).unwrap() == '\n' {
-        //                 index = j - 1;
-        //                 break;
-        //             }
-        //         }
-        //         last_newline = Some(index);
-        //         i - index
-        //     }
-        // };
 
         // TODO: Deduplicate code
 
