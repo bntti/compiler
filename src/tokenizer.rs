@@ -1,6 +1,6 @@
 use regex::{Captures, Regex};
 
-#[derive(Eq, PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone)]
 pub enum TokenType {
     Identifier,
     Integer,
@@ -9,7 +9,7 @@ pub enum TokenType {
     End,
 }
 
-#[derive(Eq, PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone)]
 pub struct Token {
     pub token_type: TokenType,
     pub value: String,

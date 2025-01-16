@@ -1,6 +1,7 @@
 mod compiler;
 mod parser;
 mod tokenizer;
+mod util;
 
 use base64::prelude::*;
 use clap::Parser;
