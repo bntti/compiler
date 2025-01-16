@@ -19,7 +19,7 @@ pub struct Token {
 // Returns (capture_str, number_of_newlines, last_newline_pos)
 pub fn parse_capture(cap: Captures<'_>) -> (String, usize, usize) {
     let text = cap.get(0).unwrap().as_str().to_string();
-    let newlines = Regex::new(r"\n+").unwrap();
+    let newlines = Regex::new(r"\n").unwrap();
     let (len, pos) = match newlines.captures(&text) {
         Some(new_cap) => (new_cap.len(), new_cap.get(new_cap.len() - 1).unwrap().end()),
         None => (0, 0),
@@ -28,7 +28,7 @@ pub fn parse_capture(cap: Captures<'_>) -> (String, usize, usize) {
 }
 
 pub fn tokenize(source_code: String) -> Vec<Token> {
-    let whitespace = Regex::new(r"^[ \n\t]+").unwrap();
+    let whitespace = Regex::new(r"^\s+").unwrap();
     let multi_line_comment = Regex::new(r"(?s)^\/\*.*?\*\/").unwrap();
     let comment = Regex::new(r"^(?:\/\/|#)[^\n]*").unwrap();
     let identifier = Regex::new(r"^[a-zA-Z_][a-zA-Z\d_]*").unwrap();
