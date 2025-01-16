@@ -1,4 +1,5 @@
 mod compiler;
+mod parser;
 mod tokenizer;
 
 use base64::prelude::*;

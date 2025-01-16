@@ -1,14 +1,15 @@
 use regex::{Captures, Regex};
 
-#[derive(Eq, PartialEq, Debug)]
+#[derive(Eq, PartialEq, Debug, Clone)]
 pub enum TokenType {
     Identifier,
     Integer,
     Operator,
     Punctuation,
+    End,
 }
 
-#[derive(Eq, PartialEq, Debug)]
+#[derive(Eq, PartialEq, Debug, Clone)]
 pub struct Token {
     pub token_type: TokenType,
     pub value: String,
@@ -28,7 +29,7 @@ pub fn parse_capture(cap: Captures<'_>) -> (String, usize, usize) {
 
 pub fn tokenize(source_code: String) -> Vec<Token> {
     let whitespace = Regex::new(r"^[ \n\t]+").unwrap();
-    let multi_line_comment = Regex::new(r"(?s)^\/\*(:?.*?\*\/)").unwrap();
+    let multi_line_comment = Regex::new(r"(?s)^\/\*.*?\*\/").unwrap();
     let comment = Regex::new(r"^(?:\/\/|#)[^\n]*").unwrap();
     let identifier = Regex::new(r"^[a-zA-Z_][a-zA-Z\d_]*").unwrap();
     let integer = Regex::new(r"^\d+").unwrap(); // Allow leading zeroes
