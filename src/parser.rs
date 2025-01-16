@@ -22,6 +22,7 @@ pub struct BinaryOp {
 
 #[derive(Debug, PartialEq)]
 pub enum Ast {
+    Root(Box<Vec<Ast>>),
     IntLiteral(IntLiteral),
     BoolLiteral { value: bool },
     NoneLiteral,
@@ -45,22 +46,27 @@ enum Expected {
     None,
     String(String),
     Strings(Vec<String>),
+    Semi,
 }
 
 // Consume expected, returns token at pos
 fn consume(tokens: &Vec<Token>, pos: &mut usize, expected: Expected) -> Token {
     let token = peek(tokens, *pos);
+    let location = token.location;
     match expected {
         Expected::String(value) => {
             if token.value != value {
-                let location = token.location;
                 panic!("{location:?}: Expected \"{value}\"")
             }
         }
         Expected::Strings(values) => {
             if !values.contains(&token.value) {
-                let location = token.location;
                 panic!("{location:?}: Expected one of \"{values:?}\"")
+            }
+        }
+        Expected::Semi => {
+            if &token.value != ";" {
+                panic!("{location:?}: Expected ';'")
             }
         }
         Expected::None => {}
@@ -133,14 +139,29 @@ fn parse_factor(tokens: &Vec<Token>, pos: &mut usize) -> Ast {
     match token.token_type {
         TokenType::Integer => Ast::IntLiteral(parse_int_literal(tokens, pos)),
         TokenType::Identifier => Ast::Identifier(parse_identifier(tokens, pos)),
+        TokenType::Punctuation if token.value == String::from("(") => {
+            parse_parenthesized(tokens, pos)
+        }
         _ => panic!("{location:?}: Expected an integer literal or an identifier"),
     }
+}
+
+fn parse_parenthesized(tokens: &Vec<Token>, pos: &mut usize) -> Ast {
+    consume(tokens, pos, Expected::String(String::from("(")));
+    let ast = parse_expression(tokens, pos);
+    consume(tokens, pos, Expected::String(String::from(")")));
+    ast
 }
 
 pub fn parse(tokens: Vec<Token>) -> Ast {
     let mut pos = 0;
 
-    parse_expression(&tokens, &mut pos)
+    let mut data = vec![];
+    while peek(&tokens, pos).token_type != TokenType::End {
+        data.push(parse_expression(&tokens, &mut pos));
+        consume(&tokens, &mut pos, Expected::Semi);
+    }
+    Ast::Root(Box::new(data))
 }
 
 #[cfg(test)]
@@ -150,6 +171,14 @@ mod tests {
     use super::*;
 
     // Macro rules to make creating asts manually easier
+    macro_rules! rast {
+        () => (
+            Ast::Root(Box::new(Vec::new()))
+        );
+        ($($x:expr),+ $(,)?) => (
+            Ast::Root(Box::new(vec![$($x),+]))
+        );
+    }
     macro_rules! bast {
         ($left: expr, $op: expr, $right: expr) => {
             Ast::BinaryOp(BinaryOp {
@@ -175,36 +204,64 @@ mod tests {
     // Tests
     #[test]
     fn test_simple_addition() {
-        let tokens = tokenize(String::from("1+1"));
-        let expected = bast![iast!(1), "+", iast!(1)];
+        let tokens = tokenize(String::from("1+1;"));
+        let expected = rast![bast![iast!(1), "+", iast!(1)]];
         assert_eq!(parse(tokens), expected);
     }
 
     #[test]
     fn test_simple_addition_with_identifiers() {
-        let tokens = tokenize(String::from("x-50"));
-        let expected = bast![idast!("x"), "-", iast!(50)];
+        let tokens = tokenize(String::from("x-50;"));
+        let expected = rast![bast![idast!("x"), "-", iast!(50)]];
         assert_eq!(parse(tokens), expected);
     }
 
     #[test]
     fn test_multiple_additions() {
-        let tokens = tokenize(String::from("2-3+4"));
-        let expected = bast![bast![iast!(2), "-", iast!(3)], "+", iast!(4)];
+        let tokens = tokenize(String::from("2-3+4;"));
+        let expected = rast![bast![bast![iast!(2), "-", iast!(3)], "+", iast!(4)]];
         assert_eq!(parse(tokens), expected);
     }
 
     #[test]
     fn test_multiplication() {
-        let tokens = tokenize(String::from("1*2/3"));
-        let expected = bast![bast![iast!(1), "*", iast!(2)], "/", iast!(3)];
+        let tokens = tokenize(String::from("1*2/3;"));
+        let expected = rast![bast![bast![iast!(1), "*", iast!(2)], "/", iast!(3)]];
         assert_eq!(parse(tokens), expected);
     }
 
     #[test]
     fn test_multiplication_and_addition() {
-        let tokens = tokenize(String::from("1+2*3"));
-        let expected = bast![iast!(1), "+", bast![iast!(2), "*", iast!(3)]];
+        let tokens = tokenize(String::from("1+2*3;"));
+        let expected = rast![bast![iast!(1), "+", bast![iast!(2), "*", iast!(3)]]];
         assert_eq!(parse(tokens), expected);
+    }
+
+    #[test]
+    fn test_parenthesis() {
+        let tokens = tokenize(String::from("(1+2)*3;"));
+        let expected = rast![bast![bast![iast!(1), "+", iast!(2)], "*", iast!(3)]];
+        assert_eq!(parse(tokens), expected);
+    }
+
+    #[test]
+    fn test_empty() {
+        let tokens = tokenize(String::from(""));
+        let expected = rast![];
+        assert_eq!(parse(tokens), expected);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_missing_number() {
+        let tokens = tokenize(String::from("1+1+;"));
+        parse(tokens);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_extra_number() {
+        let tokens = tokenize(String::from("1+1 1;"));
+        parse(tokens);
     }
 }
