@@ -252,6 +252,7 @@ fn parse_line(tokens: &Vec<Token>, pos: &mut usize) -> Ast {
     }
 }
 
+// Sorted in precedence order
 const BIN_OP: [&[&str]; 7] = [
     &[],                     // 0, Special case for "="
     &["or"],                 // 1
@@ -260,14 +261,17 @@ const BIN_OP: [&[&str]; 7] = [
     &["<", "<=", ">", ">="], // 4
     &["+", "-"],             // 5
     &["*", "/", "%"],        // 6
+                             // 7, -, not
+                             // 8, literal, identifier, if, block, parenthesis, function call
 ];
-// Terms:
-// -, not
-// literal, identifier, if, block, parenthesis, function call
 
 // Parse something that returns a value
 fn parse_expression(tokens: &Vec<Token>, pos: &mut usize, level: usize) -> Ast {
-    let mut left = parse_term(tokens, pos);
+    let mut left = if level < 7 {
+        parse_expression(tokens, pos, level + 1)
+    } else {
+        parse_term(tokens, pos) // Contains levels 7 and 8
+    };
     let mut token = peek(tokens, *pos);
     let location = token.location;
 
@@ -308,20 +312,21 @@ fn parse_expression(tokens: &Vec<Token>, pos: &mut usize, level: usize) -> Ast {
     left
 }
 
+// Could be added to parse_expression
 fn parse_term(tokens: &Vec<Token>, pos: &mut usize) -> Ast {
     let token = peek(tokens, *pos);
     let location = token.location;
     match token.value.as_str() {
         "if" => {
             let if_token = consume(tokens, pos, Expected::String(String::from("if")));
-            let cond = parse_term(tokens, pos);
+            let cond = parse_expression(tokens, pos, 0);
             consume(tokens, pos, Expected::String(String::from("then")));
-            let then = parse_term(tokens, pos);
+            let then = parse_expression(tokens, pos, 0);
 
             let mut els = None;
             if peek(tokens, *pos).value == *"else" {
                 consume(tokens, pos, Expected::String(String::from("else")));
-                els = Some(parse_term(tokens, pos));
+                els = Some(parse_expression(tokens, pos, 0));
             }
             return Ast::If {
                 cond: Box::new(cond),
@@ -400,8 +405,10 @@ fn parse_term(tokens: &Vec<Token>, pos: &mut usize) -> Ast {
             consume(tokens, pos, Expected::String(String::from("(")));
             let mut params = vec![];
             while peek(tokens, *pos).token_type != TokenType::End {
-                let expression = parse_expression(tokens, pos, 0);
-                params.push(expression);
+                if peek(tokens, *pos).value != ")" {
+                    let expression = parse_expression(tokens, pos, 0);
+                    params.push(expression);
+                }
                 if peek(tokens, *pos).value == ")" {
                     consume(tokens, pos, Expected::String(String::from(")")));
                     return Ast::Function {
@@ -657,6 +664,23 @@ mod tests {
     fn test_extra_number() {
         let tokens = tokenize(String::from("1+1 1;"));
         parse(tokens);
+    }
+
+    #[test]
+    fn test_binary_ops() {
+        let tokens = tokenize(String::from("n / 2 == 0;"));
+        let expected = rast![bast!(bast!(idast!("n"), "/", iast!(2)), "==", iast!(0))];
+        assert_eq!(parse(tokens), expected);
+    }
+
+    #[test]
+    fn test_binary_ops_in_if() {
+        let tokens = tokenize(String::from("if n / 2 == 0 then 1;"));
+        let expected = rast![ifast!(
+            bast!(bast!(idast!("n"), "/", iast!(2)), "==", iast!(0)),
+            iast!(1)
+        )];
+        assert_eq!(parse(tokens), expected);
     }
 
     mod block_tests {
