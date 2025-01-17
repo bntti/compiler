@@ -24,7 +24,7 @@ pub fn parse_capture(cap: Captures<'_>) -> (String, usize, usize) {
         Some(new_cap) => (new_cap.len(), new_cap.get(new_cap.len() - 1).unwrap().end()),
         None => (0, 0),
     };
-    return (text, len, pos);
+    (text, len, pos)
 }
 
 pub fn tokenize(source_code: String) -> Vec<Token> {

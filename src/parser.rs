@@ -22,16 +22,19 @@ pub struct BinaryOp {
 
 #[derive(Debug, PartialEq)]
 pub enum Ast {
-    Root(Box<Vec<Ast>>),
+    Root(Vec<Ast>),
+    Block(Vec<Ast>),
     IntLiteral(IntLiteral),
     BoolLiteral { value: bool },
     NoneLiteral,
     Identifier(Identifier),
+    Var(Box<Ast>),
+    While { left: Box<Ast>, right: Box<Ast> },
     BinaryOp(BinaryOp),
 }
 
 // Return the token at pos or the End token
-fn peek(tokens: &Vec<Token>, pos: usize) -> Token {
+fn peek(tokens: &[Token], pos: usize) -> Token {
     if pos < tokens.len() {
         tokens[pos].clone()
     } else {
@@ -46,11 +49,12 @@ enum Expected {
     None,
     String(String),
     Strings(Vec<String>),
+    Token(TokenType),
     Semi,
 }
 
 // Consume expected, returns token at pos
-fn consume(tokens: &Vec<Token>, pos: &mut usize, expected: Expected) -> Token {
+fn consume(tokens: &[Token], pos: &mut usize, expected: Expected) -> Token {
     let token = peek(tokens, *pos);
     let location = token.location;
     match expected {
@@ -62,6 +66,11 @@ fn consume(tokens: &Vec<Token>, pos: &mut usize, expected: Expected) -> Token {
         Expected::Strings(values) => {
             if !values.contains(&token.value) {
                 panic!("{location:?}: Expected one of \"{values:?}\"")
+            }
+        }
+        Expected::Token(expected_token) => {
+            if token.token_type != expected_token {
+                panic!("{location:?}: Expected \"{expected_token:?}\"")
             }
         }
         Expected::Semi => {
@@ -77,7 +86,7 @@ fn consume(tokens: &Vec<Token>, pos: &mut usize, expected: Expected) -> Token {
 }
 
 // Consumes token at pos and returns the integer literal
-fn parse_int_literal(tokens: &Vec<Token>, pos: &mut usize) -> IntLiteral {
+fn parse_int_literal(tokens: &[Token], pos: &mut usize) -> IntLiteral {
     let token = peek(tokens, *pos);
     let location = token.location;
     let value = token.value;
@@ -94,7 +103,7 @@ fn parse_int_literal(tokens: &Vec<Token>, pos: &mut usize) -> IntLiteral {
 }
 
 // Consumes token at pos and returns the identifier
-fn parse_identifier(tokens: &Vec<Token>, pos: &mut usize) -> Identifier {
+fn parse_identifier(tokens: &[Token], pos: &mut usize) -> Identifier {
     let token = peek(tokens, *pos);
     let location = token.location;
     if token.token_type != TokenType::Identifier {
@@ -104,6 +113,98 @@ fn parse_identifier(tokens: &Vec<Token>, pos: &mut usize) -> Identifier {
     Identifier { name: token.value }
 }
 
+// Special case for =
+const BIN_OP: [&[&str]; 7] = [
+    &[],
+    &["or"],
+    &["and"],
+    &["==", "!="],
+    &["<", "<=", ">", ">="],
+    &["+", "-"],
+    &["*", "/", "%"],
+];
+
+pub fn parse(tokens: Vec<Token>) -> Ast {
+    let mut pos = 0;
+    parse_block(&tokens, &mut pos, Ast::Root(vec![]))
+}
+
+fn parse_block(tokens: &Vec<Token>, pos: &mut usize, parent: Ast) -> Ast {
+    let mut data = vec![];
+    match parent {
+        Ast::Root(_) => {
+            while peek(tokens, *pos).token_type != TokenType::End {
+                data.push(parse_line(tokens, pos));
+
+                let val = peek(tokens, *pos).value;
+                println!("Next token {val}");
+
+                consume(tokens, pos, Expected::Semi);
+            }
+            Ast::Root(data)
+        }
+        Ast::Block(_) => {
+            while peek(tokens, *pos).token_type != TokenType::End {
+                data.push(parse_line(tokens, pos));
+
+                let mut semi = false;
+                let token = peek(tokens, *pos);
+                if token.value.as_str() == ";" {
+                    consume(tokens, pos, Expected::Semi);
+                    semi = true;
+                }
+
+                let token = peek(tokens, *pos);
+                if token.value.as_str() == "}" {
+                    if semi {
+                        data.push(Ast::NoneLiteral);
+                    }
+                    consume(tokens, pos, Expected::String(String::from("}")));
+                    return Ast::Block(data);
+                }
+            }
+            panic!("Unexpected end of code");
+        }
+        _ => panic!("Expected block"),
+    }
+}
+
+fn parse_line(tokens: &Vec<Token>, pos: &mut usize) -> Ast {
+    let token = peek(tokens, *pos);
+
+    match token.value.as_str() {
+        "var" => {
+            consume(tokens, pos, Expected::String(String::from("var")));
+            let identifier = consume(tokens, pos, Expected::Token(TokenType::Identifier));
+            let left = Ast::Identifier(Identifier {
+                name: identifier.value,
+            });
+
+            consume(tokens, pos, Expected::String(String::from("=")));
+            let right = parse_expression(tokens, pos);
+
+            Ast::Var(Box::new(Ast::BinaryOp(BinaryOp {
+                left: Box::new(left),
+                op: String::from("="),
+                right: Box::new(right),
+            })))
+        }
+        "while" => {
+            consume(tokens, pos, Expected::String(String::from("while")));
+            let left = parse_expression(tokens, pos);
+            consume(tokens, pos, Expected::String(String::from("do")));
+            consume(tokens, pos, Expected::String(String::from("{")));
+            let right = parse_block(tokens, pos, Ast::Block(vec![]));
+            Ast::While {
+                left: Box::new(left),
+                right: Box::new(right),
+            }
+        }
+        _ => parse_expression(tokens, pos),
+    }
+}
+
+// Parse something that returns a value
 fn parse_expression(tokens: &Vec<Token>, pos: &mut usize) -> Ast {
     let mut left = parse_term(tokens, pos);
     while svec!["+", "-"].contains(&peek(tokens, *pos).value) {
@@ -139,9 +240,7 @@ fn parse_factor(tokens: &Vec<Token>, pos: &mut usize) -> Ast {
     match token.token_type {
         TokenType::Integer => Ast::IntLiteral(parse_int_literal(tokens, pos)),
         TokenType::Identifier => Ast::Identifier(parse_identifier(tokens, pos)),
-        TokenType::Punctuation if token.value == String::from("(") => {
-            parse_parenthesized(tokens, pos)
-        }
+        TokenType::Punctuation if token.value == *"(" => parse_parenthesized(tokens, pos),
         _ => panic!("{location:?}: Expected an integer literal or an identifier"),
     }
 }
@@ -153,17 +252,6 @@ fn parse_parenthesized(tokens: &Vec<Token>, pos: &mut usize) -> Ast {
     ast
 }
 
-pub fn parse(tokens: Vec<Token>) -> Ast {
-    let mut pos = 0;
-
-    let mut data = vec![];
-    while peek(&tokens, pos).token_type != TokenType::End {
-        data.push(parse_expression(&tokens, &mut pos));
-        consume(&tokens, &mut pos, Expected::Semi);
-    }
-    Ast::Root(Box::new(data))
-}
-
 #[cfg(test)]
 mod tests {
     use crate::tokenizer::tokenize;
@@ -171,14 +259,26 @@ mod tests {
     use super::*;
 
     // Macro rules to make creating asts manually easier
+    // Root
     macro_rules! rast {
         () => (
-            Ast::Root(Box::new(Vec::new()))
+            Ast::Root(Vec::new())
         );
         ($($x:expr),+ $(,)?) => (
-            Ast::Root(Box::new(vec![$($x),+]))
+            Ast::Root(vec![$($x),+])
         );
     }
+    // Block
+    macro_rules! blast {
+            () => (
+                Ast::Block(Vec::new())
+            );
+            ($($x:expr),+ $(,)?) => (
+                Ast::Block(vec![$($x),+])
+            );
+        }
+
+    // BinaryOp
     macro_rules! bast {
         ($left: expr, $op: expr, $right: expr) => {
             Ast::BinaryOp(BinaryOp {
@@ -188,16 +288,39 @@ mod tests {
             })
         };
     }
+    // Integer
     macro_rules! iast {
         ($value: expr) => {
             Ast::IntLiteral(IntLiteral { value: $value })
         };
     }
+    // None
+    macro_rules! nast {
+        () => {
+            Ast::NoneLiteral
+        };
+    }
+    // Identifier
     macro_rules! idast {
         ($name: expr) => {
             Ast::Identifier(Identifier {
                 name: $name.to_owned(),
             })
+        };
+    }
+    // Var
+    macro_rules! vast {
+        ($ast: expr) => {
+            Ast::Var(Box::new($ast))
+        };
+    }
+    // While
+    macro_rules! wast {
+        ($left: expr, $right: expr) => {
+            Ast::While {
+                left: Box::new($left),
+                right: Box::new($right),
+            }
         };
     }
 
@@ -251,6 +374,23 @@ mod tests {
         assert_eq!(parse(tokens), expected);
     }
 
+    #[test]
+    fn test_var() {
+        let tokens = tokenize(String::from("var x = 2;"));
+        let expected = rast![vast!(bast![idast!("x"), "=", iast!(2)])];
+        assert_eq!(parse(tokens), expected);
+    }
+    #[test]
+    fn test_while() {
+        let tokens = tokenize(String::from("while x do { var y = 2; };"));
+        let expected = rast![wast!(
+            idast!("x"),
+            blast![vast!(bast![idast!("y"), "=", iast!(2)]), nast!()]
+        )];
+        assert_eq!(parse(tokens), expected);
+    }
+
+    // Failing tests
     #[test]
     #[should_panic]
     fn test_missing_number() {
