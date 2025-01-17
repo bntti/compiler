@@ -51,6 +51,14 @@ fn peek(tokens: &[Token], pos: usize) -> Token {
         }
     }
 }
+// Return the token at pos or the End token
+fn peek_back(tokens: &[Token], pos: usize) -> Token {
+    if pos == 0 {
+        panic!("Tried to call peek_back when pos was 0");
+    }
+    tokens[pos - 1].clone()
+}
+
 enum Expected {
     None,
     String(String),
@@ -114,6 +122,12 @@ fn parse_block(tokens: &Vec<Token>, pos: &mut usize, parent: Ast) -> Ast {
         Ast::Root(_) => {
             while peek(tokens, *pos).token_type != TokenType::End {
                 data.push(parse_line(tokens, pos));
+
+                // Don't require ';' after braces
+                if peek_back(tokens, *pos).value == "}" && peek(tokens, *pos).value != ";" {
+                    continue;
+                }
+
                 consume(tokens, pos, Expected::Semi);
             }
             Ast::Root(data)
@@ -124,6 +138,7 @@ fn parse_block(tokens: &Vec<Token>, pos: &mut usize, parent: Ast) -> Ast {
 
                 let mut semi = false;
                 let token = peek(tokens, *pos);
+                let location = token.location;
                 if token.value.as_str() == ";" {
                     consume(tokens, pos, Expected::Semi);
                     semi = true;
@@ -136,6 +151,11 @@ fn parse_block(tokens: &Vec<Token>, pos: &mut usize, parent: Ast) -> Ast {
                     }
                     consume(tokens, pos, Expected::String(String::from("}")));
                     return Ast::Block(data);
+                }
+
+                // Don't require ';' after braces
+                if !semi && peek_back(tokens, *pos).value != "}" {
+                    panic!("{location:?} expected ';'");
                 }
             }
             panic!("Unexpected end of code, missing '}}'");
@@ -281,6 +301,11 @@ fn parse_term(tokens: &Vec<Token>, pos: &mut usize) -> Ast {
         TokenType::Identifier => {
             let identifier = {
                 let token = consume(tokens, pos, Expected::Token(TokenType::Identifier));
+                match token.value.as_str() {
+                    "true" => return Ast::BoolLiteral { value: true },
+                    "false" => return Ast::BoolLiteral { value: false },
+                    _ => {}
+                }
                 Ast::Identifier { name: token.value }
             };
             let next_token = peek(tokens, *pos);
@@ -500,14 +525,8 @@ mod tests {
                 fast![idast!("x")]
             ]
         ]];
-        for token in &tokens {
-            let text = &token.value;
-            print!("{text} ");
-        }
-        println!();
         assert_eq!(parse(tokens), expected);
     }
-
     #[test]
     fn test_if() {
         let tokens = tokenize(String::from("a = if b then c else d;"));
@@ -516,15 +535,10 @@ mod tests {
             "=",
             ifast!(idast!("b"), idast!("c"), idast!("d"))
         ]];
-        for token in &tokens {
-            let text = &token.value;
-            print!("{text} ");
-        }
-        println!();
         assert_eq!(parse(tokens), expected);
     }
 
-    // Failing tests
+    // Panicking tests
     #[test]
     #[should_panic]
     fn test_missing_number() {
@@ -537,5 +551,82 @@ mod tests {
     fn test_extra_number() {
         let tokens = tokenize(String::from("1+1 1;"));
         parse(tokens);
+    }
+
+    mod block_tests {
+        use crate::tokenizer::tokenize;
+
+        use super::*;
+
+        #[test]
+        fn test_blocks() {
+            let tokens = tokenize(String::from("{ { a } { b } }"));
+            let expected = rast![blast![blast![idast!("a")], blast![idast!("b")]]];
+            assert_eq!(parse(tokens), expected);
+        }
+        #[test]
+        fn test_blocks_2() {
+            let tokens = tokenize(String::from("{ if true then { a } b }"));
+            let expected = rast![blast![
+                ifast!(Ast::BoolLiteral { value: true }, blast![idast!("a")]),
+                idast!("b")
+            ]];
+            assert_eq!(parse(tokens), expected);
+        }
+        #[test]
+        fn test_blocks_3() {
+            let tokens = tokenize(String::from("{ if true then { a }; b }"));
+            let expected = rast![blast![
+                ifast!(Ast::BoolLiteral { value: true }, blast![idast!("a")]),
+                idast!("b")
+            ]];
+            assert_eq!(parse(tokens), expected);
+        }
+        #[test]
+        fn test_blocks_4() {
+            let tokens = tokenize(String::from("{ if true then { a }; b; c }"));
+            let expected = rast![blast![
+                ifast!(Ast::BoolLiteral { value: true }, blast![idast!("a")]),
+                idast!("b"),
+                idast!("c")
+            ]];
+            assert_eq!(parse(tokens), expected);
+        }
+        #[test]
+        fn test_blocks_5() {
+            let tokens = tokenize(String::from("{ if true then { a } else { b } 3 }"));
+            let expected = rast![blast![
+                ifast!(
+                    Ast::BoolLiteral { value: true },
+                    blast![idast!("a")],
+                    blast![idast!("b")]
+                ),
+                iast!(3)
+            ]];
+            assert_eq!(parse(tokens), expected);
+        }
+        #[test]
+        fn test_blocks_6() {
+            let tokens = tokenize(String::from("x = { { f(a) } { b } }"));
+            let expected = rast![bast!(
+                idast!("x"),
+                "=",
+                blast![blast![fast![idast!("a")]], blast![idast!("b")]]
+            )];
+            assert_eq!(parse(tokens), expected);
+        }
+
+        #[test]
+        #[should_panic]
+        fn test_panic_blocks() {
+            let tokens = tokenize(String::from("{ a b }"));
+            parse(tokens);
+        }
+        #[test]
+        #[should_panic]
+        fn test_panic_blocks_2() {
+            let tokens = tokenize(String::from("{ if true then { a } b c }"));
+            parse(tokens);
+        }
     }
 }
