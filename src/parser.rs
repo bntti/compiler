@@ -1,36 +1,37 @@
 #![expect(dead_code)]
 
-use crate::{
-    svec,
-    tokenizer::{Token, TokenType},
-};
+use crate::tokenizer::{Token, TokenType};
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct IntLiteral {
     value: i32,
 }
-#[derive(Debug, PartialEq)]
-pub struct Identifier {
-    name: String,
-}
-#[derive(Debug, PartialEq)]
-pub struct BinaryOp {
-    left: Box<Ast>,
-    op: String,
-    right: Box<Ast>,
-}
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Ast {
     Root(Vec<Ast>),
     Block(Vec<Ast>),
+    Function(Vec<Ast>),
     IntLiteral(IntLiteral),
-    BoolLiteral { value: bool },
+    BoolLiteral {
+        value: bool,
+    },
     NoneLiteral,
-    Identifier(Identifier),
+    Identifier {
+        name: String,
+    },
     Var(Box<Ast>),
-    While { left: Box<Ast>, right: Box<Ast> },
-    BinaryOp(BinaryOp),
+    While {
+        left: Box<Ast>,
+        right: Box<Ast>,
+    },
+    Minus(Box<Ast>),
+    Negate(Box<Ast>),
+    BinaryOp {
+        left: Box<Ast>,
+        op: String,
+        right: Box<Ast>,
+    },
 }
 
 // Return the token at pos or the End token
@@ -87,42 +88,15 @@ fn consume(tokens: &[Token], pos: &mut usize, expected: Expected) -> Token {
 
 // Consumes token at pos and returns the integer literal
 fn parse_int_literal(tokens: &[Token], pos: &mut usize) -> IntLiteral {
-    let token = peek(tokens, *pos);
+    let token = consume(tokens, pos, Expected::Token(TokenType::Integer));
     let location = token.location;
     let value = token.value;
-
-    if token.token_type != TokenType::Integer {
-        panic!("{location:?}: Expected integer literal")
-    }
-    consume(tokens, pos, Expected::None);
     IntLiteral {
         value: value
             .parse::<i32>()
-            .unwrap_or_else(|_| panic!("{location:?}: Invalid integer \"{value}\"")),
+            .unwrap_or_else(|_| panic!("{location:?}: Invalid integer \"{value}\"")), // Should never happen?
     }
 }
-
-// Consumes token at pos and returns the identifier
-fn parse_identifier(tokens: &[Token], pos: &mut usize) -> Identifier {
-    let token = peek(tokens, *pos);
-    let location = token.location;
-    if token.token_type != TokenType::Identifier {
-        panic!("{location:?}: Expected identifier")
-    }
-    consume(tokens, pos, Expected::None);
-    Identifier { name: token.value }
-}
-
-// Special case for =
-const BIN_OP: [&[&str]; 7] = [
-    &[],
-    &["or"],
-    &["and"],
-    &["==", "!="],
-    &["<", "<=", ">", ">="],
-    &["+", "-"],
-    &["*", "/", "%"],
-];
 
 pub fn parse(tokens: Vec<Token>) -> Ast {
     let mut pos = 0;
@@ -135,10 +109,6 @@ fn parse_block(tokens: &Vec<Token>, pos: &mut usize, parent: Ast) -> Ast {
         Ast::Root(_) => {
             while peek(tokens, *pos).token_type != TokenType::End {
                 data.push(parse_line(tokens, pos));
-
-                let val = peek(tokens, *pos).value;
-                println!("Next token {val}");
-
                 consume(tokens, pos, Expected::Semi);
             }
             Ast::Root(data)
@@ -163,7 +133,7 @@ fn parse_block(tokens: &Vec<Token>, pos: &mut usize, parent: Ast) -> Ast {
                     return Ast::Block(data);
                 }
             }
-            panic!("Unexpected end of code");
+            panic!("Unexpected end of code, missing '}}'");
         }
         _ => panic!("Expected block"),
     }
@@ -176,22 +146,22 @@ fn parse_line(tokens: &Vec<Token>, pos: &mut usize) -> Ast {
         "var" => {
             consume(tokens, pos, Expected::String(String::from("var")));
             let identifier = consume(tokens, pos, Expected::Token(TokenType::Identifier));
-            let left = Ast::Identifier(Identifier {
+            let left = Ast::Identifier {
                 name: identifier.value,
-            });
+            };
 
             consume(tokens, pos, Expected::String(String::from("=")));
-            let right = parse_expression(tokens, pos);
+            let right = parse_expression(tokens, pos, 0);
 
-            Ast::Var(Box::new(Ast::BinaryOp(BinaryOp {
+            Ast::Var(Box::new(Ast::BinaryOp {
                 left: Box::new(left),
                 op: String::from("="),
                 right: Box::new(right),
-            })))
+            }))
         }
         "while" => {
             consume(tokens, pos, Expected::String(String::from("while")));
-            let left = parse_expression(tokens, pos);
+            let left = parse_expression(tokens, pos, 0);
             consume(tokens, pos, Expected::String(String::from("do")));
             consume(tokens, pos, Expected::String(String::from("{")));
             let right = parse_block(tokens, pos, Ast::Block(vec![]));
@@ -200,56 +170,123 @@ fn parse_line(tokens: &Vec<Token>, pos: &mut usize) -> Ast {
                 right: Box::new(right),
             }
         }
-        _ => parse_expression(tokens, pos),
+        _ => parse_expression(tokens, pos, 0),
     }
 }
+
+const BIN_OP: [&[&str]; 7] = [
+    &[],                     // 0, Special case for "="
+    &["or"],                 // 1
+    &["and"],                // 2
+    &["==", "!="],           // 3
+    &["<", "<=", ">", ">="], // 4
+    &["+", "-"],             // 5
+    &["*", "/", "%"],        // 6
+];
+// Terms:
+// -, not
+// literal, identifier, if, block, parenthesis, function call
 
 // Parse something that returns a value
-fn parse_expression(tokens: &Vec<Token>, pos: &mut usize) -> Ast {
+fn parse_expression(tokens: &Vec<Token>, pos: &mut usize, level: usize) -> Ast {
     let mut left = parse_term(tokens, pos);
-    while svec!["+", "-"].contains(&peek(tokens, *pos).value) {
-        let op = consume(tokens, pos, Expected::None);
-        let right = parse_term(tokens, pos);
-        left = Ast::BinaryOp(BinaryOp {
+    let mut token = peek(tokens, *pos);
+    let location = token.location;
+
+    // Special case for equality
+    if token.value == *"=" && level == 0 {
+        if !matches!(left, Ast::Identifier { name: _ }) {
+            panic!("({location:?}) Expected variable")
+        }
+
+        consume(tokens, pos, Expected::String(String::from("=")));
+
+        // Allow same level on purpose because of right-associativity
+        let right = parse_expression(tokens, pos, 0);
+
+        return Ast::BinaryOp {
             left: Box::new(left),
-            op: op.value,
+            op: String::from("="),
             right: Box::new(right),
-        })
+        };
+    }
+
+    // Other binary ops
+    for (op_lvl, ops) in BIN_OP.iter().enumerate().skip(level) {
+        while ops.contains(&token.value.as_str()) {
+            let op = consume(tokens, pos, Expected::None);
+            let right = parse_expression(tokens, pos, op_lvl + 1);
+            left = Ast::BinaryOp {
+                left: Box::new(left),
+                op: op.value,
+                right: Box::new(right),
+            };
+
+            token = peek(tokens, *pos);
+        }
     }
     left
 }
 
-// Parses * / expressions
 fn parse_term(tokens: &Vec<Token>, pos: &mut usize) -> Ast {
-    let mut left = parse_factor(tokens, pos);
-    while svec!["*", "/"].contains(&peek(tokens, *pos).value) {
-        let op = consume(tokens, pos, Expected::None);
-        let right = parse_factor(tokens, pos);
-        left = Ast::BinaryOp(BinaryOp {
-            left: Box::new(left),
-            op: op.value,
-            right: Box::new(right),
-        });
-    }
-    left
-}
-
-fn parse_factor(tokens: &Vec<Token>, pos: &mut usize) -> Ast {
     let token = peek(tokens, *pos);
     let location = token.location;
-    match token.token_type {
-        TokenType::Integer => Ast::IntLiteral(parse_int_literal(tokens, pos)),
-        TokenType::Identifier => Ast::Identifier(parse_identifier(tokens, pos)),
-        TokenType::Punctuation if token.value == *"(" => parse_parenthesized(tokens, pos),
-        _ => panic!("{location:?}: Expected an integer literal or an identifier"),
+    match token.value.as_str() {
+        "if" => {
+            todo!();
+            // return;
+        }
+        "-" => {
+            consume(tokens, pos, Expected::String(String::from("-")));
+            let expression = parse_term(tokens, pos);
+            return Ast::Minus(Box::new(expression));
+        }
+        "not" => {
+            consume(tokens, pos, Expected::String(String::from("not")));
+            let expression = parse_term(tokens, pos);
+            return Ast::Negate(Box::new(expression));
+        }
+        "(" => {
+            consume(tokens, pos, Expected::String(String::from("(")));
+            let expression = parse_expression(tokens, pos, 0);
+            consume(tokens, pos, Expected::String(String::from(")")));
+            return expression;
+        }
+        "{" => {
+            consume(tokens, pos, Expected::String(String::from("{")));
+            return parse_block(tokens, pos, Ast::Block(vec![]));
+        }
+        _ => {}
     }
-}
+    match token.token_type {
+        TokenType::Integer => return Ast::IntLiteral(parse_int_literal(tokens, pos)),
+        TokenType::Identifier => {
+            let identifier = {
+                let token = consume(tokens, pos, Expected::Token(TokenType::Identifier));
+                Ast::Identifier { name: token.value }
+            };
+            let next_token = peek(tokens, *pos);
+            if next_token.value != "(" {
+                return identifier;
+            }; // Variable
 
-fn parse_parenthesized(tokens: &Vec<Token>, pos: &mut usize) -> Ast {
-    consume(tokens, pos, Expected::String(String::from("(")));
-    let ast = parse_expression(tokens, pos);
-    consume(tokens, pos, Expected::String(String::from(")")));
-    ast
+            // Function call
+            consume(tokens, pos, Expected::String(String::from("(")));
+            let mut params = vec![];
+            while peek(tokens, *pos).token_type != TokenType::End {
+                let expression = parse_expression(tokens, pos, 0);
+                params.push(expression);
+                if peek(tokens, *pos).value == ")" {
+                    consume(tokens, pos, Expected::String(String::from(")")));
+                    return Ast::Function(params);
+                }
+                consume(tokens, pos, Expected::String(String::from(",")));
+            }
+            panic!("Missing ')' for function at {location:?}");
+        }
+        _ => {}
+    }
+    panic!("{location:?}, Expected expression");
 }
 
 #[cfg(test)]
@@ -277,15 +314,22 @@ mod tests {
                 Ast::Block(vec![$($x),+])
             );
         }
-
+    // Function
+    macro_rules! fast {
+        () => (
+            Ast::Function(Vec::new())
+        );
+        ($($x:expr),+ $(,)?) => (
+            Ast::Function(vec![$($x),+])
+        );    }
     // BinaryOp
     macro_rules! bast {
         ($left: expr, $op: expr, $right: expr) => {
-            Ast::BinaryOp(BinaryOp {
+            Ast::BinaryOp {
                 left: Box::new($left),
                 op: $op.to_owned(),
                 right: Box::new($right),
-            })
+            }
         };
     }
     // Integer
@@ -303,9 +347,9 @@ mod tests {
     // Identifier
     macro_rules! idast {
         ($name: expr) => {
-            Ast::Identifier(Identifier {
+            Ast::Identifier {
                 name: $name.to_owned(),
-            })
+            }
         };
     }
     // Var
@@ -387,6 +431,45 @@ mod tests {
             idast!("x"),
             blast![vast!(bast![idast!("y"), "=", iast!(2)]), nast!()]
         )];
+        assert_eq!(parse(tokens), expected);
+    }
+    #[test]
+    fn test_equality() {
+        let tokens = tokenize(String::from("a = b = c;"));
+        let expected = rast![bast![
+            idast!("a"),
+            "=",
+            bast![idast!("b"), "=", idast!("c")]
+        ]];
+        assert_eq!(parse(tokens), expected);
+    }
+    #[test]
+    fn test_function_call() {
+        let tokens = tokenize(String::from("f(a, b, 1+c);"));
+        let expected = rast![fast![
+            idast!("a"),
+            idast!("b"),
+            bast![iast!(1), "+", idast!("c")]
+        ]];
+        assert_eq!(parse(tokens), expected);
+    }
+    #[test]
+    fn test_returning_from_block() {
+        let tokens = tokenize(String::from("a = {f(a); x=y; f(x)};"));
+        let expected = rast![bast![
+            idast!("a"),
+            "=",
+            blast![
+                fast![idast!("a")],
+                bast![idast!("x"), "=", idast!("y")],
+                fast![idast!("x")]
+            ]
+        ]];
+        for token in &tokens {
+            let text = &token.value;
+            print!("{text} ");
+        }
+        println!();
         assert_eq!(parse(tokens), expected);
     }
 
