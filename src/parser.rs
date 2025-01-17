@@ -25,6 +25,11 @@ pub enum Ast {
         left: Box<Ast>,
         right: Box<Ast>,
     },
+    If {
+        cond: Box<Ast>,
+        then: Box<Ast>,
+        els: Box<Option<Ast>>,
+    },
     Minus(Box<Ast>),
     Negate(Box<Ast>),
     BinaryOp {
@@ -233,8 +238,21 @@ fn parse_term(tokens: &Vec<Token>, pos: &mut usize) -> Ast {
     let location = token.location;
     match token.value.as_str() {
         "if" => {
-            todo!();
-            // return;
+            consume(tokens, pos, Expected::String(String::from("if")));
+            let cond = parse_term(tokens, pos);
+            consume(tokens, pos, Expected::String(String::from("then")));
+            let then = parse_term(tokens, pos);
+
+            let mut els = None;
+            if peek(tokens, *pos).value == *"else" {
+                consume(tokens, pos, Expected::String(String::from("else")));
+                els = Some(parse_term(tokens, pos));
+            }
+            return Ast::If {
+                cond: Box::new(cond),
+                then: Box::new(then),
+                els: Box::new(els),
+            };
         }
         "-" => {
             consume(tokens, pos, Expected::String(String::from("-")));
@@ -367,6 +385,23 @@ mod tests {
             }
         };
     }
+    // If
+    macro_rules! ifast {
+        ($cond: expr, $then: expr) => {
+            Ast::If {
+                cond: Box::new($cond),
+                then: Box::new($then),
+                els: Box::new(None),
+            }
+        };
+        ($cond: expr, $then: expr, $els: expr) => {
+            Ast::If {
+                cond: Box::new($cond),
+                then: Box::new($then),
+                els: Box::new(Some($els)),
+            }
+        };
+    }
 
     // Tests
     #[test]
@@ -464,6 +499,22 @@ mod tests {
                 bast![idast!("x"), "=", idast!("y")],
                 fast![idast!("x")]
             ]
+        ]];
+        for token in &tokens {
+            let text = &token.value;
+            print!("{text} ");
+        }
+        println!();
+        assert_eq!(parse(tokens), expected);
+    }
+
+    #[test]
+    fn test_if() {
+        let tokens = tokenize(String::from("a = if b then c else d;"));
+        let expected = rast![bast![
+            idast!("a"),
+            "=",
+            ifast!(idast!("b"), idast!("c"), idast!("d"))
         ]];
         for token in &tokens {
             let text = &token.value;
