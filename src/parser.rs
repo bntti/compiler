@@ -1,41 +1,66 @@
-#![expect(dead_code)]
-
-use crate::tokenizer::{Token, TokenType};
-
-#[derive(Debug, PartialEq, Clone)]
-pub struct IntLiteral {
-    value: i32,
-}
+use crate::{
+    loc,
+    tokenizer::{Token, TokenType},
+    util::Location,
+};
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Ast {
-    Root(Vec<Ast>),
-    Block(Vec<Ast>),
-    Function(Vec<Ast>),
-    IntLiteral(IntLiteral),
-    BoolLiteral {
-        value: bool,
+    Root {
+        stats: Vec<Ast>,
+        loc: Location,
     },
-    NoneLiteral,
+    Block {
+        stats: Vec<Ast>,
+        loc: Location,
+    },
+    Function {
+        params: Vec<Ast>,
+        loc: Location,
+    },
+    IntLiteral {
+        val: i64,
+        loc: Location,
+    },
+    BoolLiteral {
+        val: bool,
+        loc: Location,
+    },
+    NoneLiteral {
+        loc: Location,
+    },
     Identifier {
         name: String,
+        loc: Location,
     },
-    Var(Box<Ast>),
+    Var {
+        stat: Box<Ast>,
+        loc: Location,
+    },
     While {
         left: Box<Ast>,
         right: Box<Ast>,
+        loc: Location,
     },
     If {
         cond: Box<Ast>,
         then: Box<Ast>,
         els: Box<Option<Ast>>,
+        loc: Location,
     },
-    Minus(Box<Ast>),
-    Negate(Box<Ast>),
+    Minus {
+        stat: Box<Ast>,
+        loc: Location,
+    },
+    Negate {
+        stat: Box<Ast>,
+        loc: Location,
+    },
     BinaryOp {
         left: Box<Ast>,
         op: String,
         right: Box<Ast>,
+        loc: Location,
     },
 }
 
@@ -47,7 +72,7 @@ fn peek(tokens: &[Token], pos: usize) -> Token {
         Token {
             token_type: TokenType::End,
             value: String::from(""),
-            location: (1, 1), // TODO:
+            location: loc!(0, 0), // TODO:
         }
     }
 }
@@ -62,7 +87,6 @@ fn peek_back(tokens: &[Token], pos: usize) -> Token {
 enum Expected {
     None,
     String(String),
-    Strings(Vec<String>),
     Token(TokenType),
     Semi,
 }
@@ -75,11 +99,6 @@ fn consume(tokens: &[Token], pos: &mut usize, expected: Expected) -> Token {
         Expected::String(value) => {
             if token.value != value {
                 panic!("{location:?}: Expected \"{value}\"")
-            }
-        }
-        Expected::Strings(values) => {
-            if !values.contains(&token.value) {
-                panic!("{location:?}: Expected one of \"{values:?}\"")
             }
         }
         Expected::Token(expected_token) => {
@@ -100,28 +119,40 @@ fn consume(tokens: &[Token], pos: &mut usize, expected: Expected) -> Token {
 }
 
 // Consumes token at pos and returns the integer literal
-fn parse_int_literal(tokens: &[Token], pos: &mut usize) -> IntLiteral {
+fn parse_int_literal(tokens: &[Token], pos: &mut usize) -> Ast {
     let token = consume(tokens, pos, Expected::Token(TokenType::Integer));
     let location = token.location;
     let value = token.value;
-    IntLiteral {
-        value: value
-            .parse::<i32>()
+    Ast::IntLiteral {
+        val: value
+            .parse::<i64>()
             .unwrap_or_else(|_| panic!("{location:?}: Invalid integer \"{value}\"")), // Should never happen?
+
+        loc: token.location,
     }
 }
 
 pub fn parse(tokens: Vec<Token>) -> Ast {
     let mut pos = 0;
-    parse_block(&tokens, &mut pos, Ast::Root(vec![]))
+    parse_block(
+        &tokens,
+        &mut pos,
+        Ast::Root {
+            stats: vec![],
+            loc: loc!(0, 0),
+        },
+    )
 }
 
 fn parse_block(tokens: &Vec<Token>, pos: &mut usize, parent: Ast) -> Ast {
-    let mut data = vec![];
+    let mut statements = vec![];
     match parent {
-        Ast::Root(_) => {
+        Ast::Root {
+            stats: _,
+            loc: location,
+        } => {
             while peek(tokens, *pos).token_type != TokenType::End {
-                data.push(parse_line(tokens, pos));
+                statements.push(parse_line(tokens, pos));
 
                 // Don't require ';' after braces
                 if peek_back(tokens, *pos).value == "}" && peek(tokens, *pos).value != ";" {
@@ -130,11 +161,17 @@ fn parse_block(tokens: &Vec<Token>, pos: &mut usize, parent: Ast) -> Ast {
 
                 consume(tokens, pos, Expected::Semi);
             }
-            Ast::Root(data)
+            Ast::Root {
+                stats: statements,
+                loc: location,
+            }
         }
-        Ast::Block(_) => {
+        Ast::Block {
+            stats: _,
+            loc: block_location,
+        } => {
             while peek(tokens, *pos).token_type != TokenType::End {
-                data.push(parse_line(tokens, pos));
+                statements.push(parse_line(tokens, pos));
 
                 let mut semi = false;
                 let token = peek(tokens, *pos);
@@ -147,10 +184,13 @@ fn parse_block(tokens: &Vec<Token>, pos: &mut usize, parent: Ast) -> Ast {
                 let token = peek(tokens, *pos);
                 if token.value.as_str() == "}" {
                     if semi {
-                        data.push(Ast::NoneLiteral);
+                        statements.push(Ast::NoneLiteral { loc: location });
                     }
                     consume(tokens, pos, Expected::String(String::from("}")));
-                    return Ast::Block(data);
+                    return Ast::Block {
+                        stats: statements,
+                        loc: block_location,
+                    };
                 }
 
                 // Don't require ';' after braces
@@ -169,30 +209,43 @@ fn parse_line(tokens: &Vec<Token>, pos: &mut usize) -> Ast {
 
     match token.value.as_str() {
         "var" => {
-            consume(tokens, pos, Expected::String(String::from("var")));
+            let var_token = consume(tokens, pos, Expected::String(String::from("var")));
             let identifier = consume(tokens, pos, Expected::Token(TokenType::Identifier));
             let left = Ast::Identifier {
                 name: identifier.value,
+                loc: identifier.location,
             };
 
-            consume(tokens, pos, Expected::String(String::from("=")));
+            let op = consume(tokens, pos, Expected::String(String::from("=")));
             let right = parse_expression(tokens, pos, 0);
 
-            Ast::Var(Box::new(Ast::BinaryOp {
-                left: Box::new(left),
-                op: String::from("="),
-                right: Box::new(right),
-            }))
+            Ast::Var {
+                stat: Box::new(Ast::BinaryOp {
+                    left: Box::new(left),
+                    op: String::from("="),
+                    right: Box::new(right),
+                    loc: op.location,
+                }),
+                loc: var_token.location,
+            }
         }
         "while" => {
-            consume(tokens, pos, Expected::String(String::from("while")));
+            let while_token = consume(tokens, pos, Expected::String(String::from("while")));
             let left = parse_expression(tokens, pos, 0);
             consume(tokens, pos, Expected::String(String::from("do")));
-            consume(tokens, pos, Expected::String(String::from("{")));
-            let right = parse_block(tokens, pos, Ast::Block(vec![]));
+            let brace_token = consume(tokens, pos, Expected::String(String::from("{")));
+            let right = parse_block(
+                tokens,
+                pos,
+                Ast::Block {
+                    stats: vec![],
+                    loc: brace_token.location,
+                },
+            );
             Ast::While {
                 left: Box::new(left),
                 right: Box::new(right),
+                loc: while_token.location,
             }
         }
         _ => parse_expression(tokens, pos, 0),
@@ -220,11 +273,11 @@ fn parse_expression(tokens: &Vec<Token>, pos: &mut usize, level: usize) -> Ast {
 
     // Special case for equality
     if token.value == *"=" && level == 0 {
-        if !matches!(left, Ast::Identifier { name: _ }) {
+        if !matches!(left, Ast::Identifier { name: _, loc: _ }) {
             panic!("({location:?}) Expected variable")
         }
 
-        consume(tokens, pos, Expected::String(String::from("=")));
+        let op = consume(tokens, pos, Expected::String(String::from("=")));
 
         // Allow same level on purpose because of right-associativity
         let right = parse_expression(tokens, pos, 0);
@@ -233,6 +286,7 @@ fn parse_expression(tokens: &Vec<Token>, pos: &mut usize, level: usize) -> Ast {
             left: Box::new(left),
             op: String::from("="),
             right: Box::new(right),
+            loc: op.location,
         };
     }
 
@@ -245,6 +299,7 @@ fn parse_expression(tokens: &Vec<Token>, pos: &mut usize, level: usize) -> Ast {
                 left: Box::new(left),
                 op: op.value,
                 right: Box::new(right),
+                loc: op.location,
             };
 
             token = peek(tokens, *pos);
@@ -258,7 +313,7 @@ fn parse_term(tokens: &Vec<Token>, pos: &mut usize) -> Ast {
     let location = token.location;
     match token.value.as_str() {
         "if" => {
-            consume(tokens, pos, Expected::String(String::from("if")));
+            let if_token = consume(tokens, pos, Expected::String(String::from("if")));
             let cond = parse_term(tokens, pos);
             consume(tokens, pos, Expected::String(String::from("then")));
             let then = parse_term(tokens, pos);
@@ -272,17 +327,24 @@ fn parse_term(tokens: &Vec<Token>, pos: &mut usize) -> Ast {
                 cond: Box::new(cond),
                 then: Box::new(then),
                 els: Box::new(els),
+                loc: if_token.location,
             };
         }
         "-" => {
-            consume(tokens, pos, Expected::String(String::from("-")));
+            let token = consume(tokens, pos, Expected::String(String::from("-")));
             let expression = parse_term(tokens, pos);
-            return Ast::Minus(Box::new(expression));
+            return Ast::Minus {
+                stat: Box::new(expression),
+                loc: token.location,
+            };
         }
         "not" => {
-            consume(tokens, pos, Expected::String(String::from("not")));
+            let token = consume(tokens, pos, Expected::String(String::from("not")));
             let expression = parse_term(tokens, pos);
-            return Ast::Negate(Box::new(expression));
+            return Ast::Negate {
+                stat: Box::new(expression),
+                loc: token.location,
+            };
         }
         "(" => {
             consume(tokens, pos, Expected::String(String::from("(")));
@@ -291,27 +353,48 @@ fn parse_term(tokens: &Vec<Token>, pos: &mut usize) -> Ast {
             return expression;
         }
         "{" => {
-            consume(tokens, pos, Expected::String(String::from("{")));
-            return parse_block(tokens, pos, Ast::Block(vec![]));
+            let token = consume(tokens, pos, Expected::String(String::from("{")));
+            return parse_block(
+                tokens,
+                pos,
+                Ast::Block {
+                    stats: vec![],
+                    loc: token.location,
+                },
+            );
         }
         _ => {}
     }
     match token.token_type {
-        TokenType::Integer => return Ast::IntLiteral(parse_int_literal(tokens, pos)),
+        TokenType::Integer => return parse_int_literal(tokens, pos),
         TokenType::Identifier => {
-            let identifier = {
-                let token = consume(tokens, pos, Expected::Token(TokenType::Identifier));
-                match token.value.as_str() {
-                    "true" => return Ast::BoolLiteral { value: true },
-                    "false" => return Ast::BoolLiteral { value: false },
-                    _ => {}
-                }
-                Ast::Identifier { name: token.value }
+            let id_token = consume(tokens, pos, Expected::Token(TokenType::Identifier));
+
+            let identifier = match id_token.value.as_str() {
+                "true" => Ast::BoolLiteral {
+                    val: true,
+                    loc: id_token.location,
+                },
+                "false" => Ast::BoolLiteral {
+                    val: false,
+                    loc: id_token.location,
+                },
+                _ => Ast::Identifier {
+                    name: id_token.value,
+                    loc: id_token.location,
+                },
             };
+
+            // If boolean return;
+            if matches!(identifier, Ast::BoolLiteral { val: _, loc: _ }) {
+                return identifier;
+            }
+
+            // Check if function call or variable;
             let next_token = peek(tokens, *pos);
             if next_token.value != "(" {
-                return identifier;
-            }; // Variable
+                return identifier; // Variable
+            };
 
             // Function call
             consume(tokens, pos, Expected::String(String::from("(")));
@@ -321,7 +404,10 @@ fn parse_term(tokens: &Vec<Token>, pos: &mut usize) -> Ast {
                 params.push(expression);
                 if peek(tokens, *pos).value == ")" {
                     consume(tokens, pos, Expected::String(String::from(")")));
-                    return Ast::Function(params);
+                    return Ast::Function {
+                        params,
+                        loc: id_token.location,
+                    };
                 }
                 consume(tokens, pos, Expected::String(String::from(",")));
             }
@@ -342,10 +428,10 @@ mod tests {
     // Root
     macro_rules! rast {
         () => (
-            Ast::Root(Vec::new())
+            Ast::Root{stats: Vec::new(), loc: loc!()}
         );
         ($($x:expr),+ $(,)?) => (
-            Ast::Root(vec![$($x),+])
+            Ast::Root{stats: vec![$($x),+], loc: loc!()}
         );
     }
     // Block
@@ -354,16 +440,16 @@ mod tests {
                 Ast::Block(Vec::new())
             );
             ($($x:expr),+ $(,)?) => (
-                Ast::Block(vec![$($x),+])
+                Ast::Block{stats: vec![$($x),+], loc: loc!()}
             );
         }
     // Function
     macro_rules! fast {
         () => (
-            Ast::Function(Vec::new())
+            Ast::Function{params: Vec::new, loc: loc!()}
         );
         ($($x:expr),+ $(,)?) => (
-            Ast::Function(vec![$($x),+])
+            Ast::Function{params: vec![$($x),+], loc: loc!()}
         );    }
     // BinaryOp
     macro_rules! bast {
@@ -372,19 +458,23 @@ mod tests {
                 left: Box::new($left),
                 op: $op.to_owned(),
                 right: Box::new($right),
+                loc: loc!(),
             }
         };
     }
     // Integer
     macro_rules! iast {
         ($value: expr) => {
-            Ast::IntLiteral(IntLiteral { value: $value })
+            Ast::IntLiteral {
+                val: $value,
+                loc: loc!(),
+            }
         };
     }
     // None
     macro_rules! nast {
         () => {
-            Ast::NoneLiteral
+            Ast::NoneLiteral { loc: loc!() }
         };
     }
     // Identifier
@@ -392,13 +482,26 @@ mod tests {
         ($name: expr) => {
             Ast::Identifier {
                 name: $name.to_owned(),
+                loc: loc!(),
+            }
+        };
+    }
+    // Identifier
+    macro_rules! boast {
+        ($value: expr) => {
+            Ast::BoolLiteral {
+                val: $value,
+                loc: loc!(),
             }
         };
     }
     // Var
     macro_rules! vast {
         ($ast: expr) => {
-            Ast::Var(Box::new($ast))
+            Ast::Var {
+                stat: Box::new($ast),
+                loc: loc!(),
+            }
         };
     }
     // While
@@ -407,6 +510,7 @@ mod tests {
             Ast::While {
                 left: Box::new($left),
                 right: Box::new($right),
+                loc: loc!(),
             }
         };
     }
@@ -417,6 +521,7 @@ mod tests {
                 cond: Box::new($cond),
                 then: Box::new($then),
                 els: Box::new(None),
+                loc: loc!(),
             }
         };
         ($cond: expr, $then: expr, $els: expr) => {
@@ -424,6 +529,7 @@ mod tests {
                 cond: Box::new($cond),
                 then: Box::new($then),
                 els: Box::new(Some($els)),
+                loc: loc!(),
             }
         };
     }
@@ -568,7 +674,13 @@ mod tests {
         fn test_blocks_2() {
             let tokens = tokenize(String::from("{ if true then { a } b }"));
             let expected = rast![blast![
-                ifast!(Ast::BoolLiteral { value: true }, blast![idast!("a")]),
+                ifast!(
+                    Ast::BoolLiteral {
+                        val: true,
+                        loc: loc!()
+                    },
+                    blast![idast!("a")]
+                ),
                 idast!("b")
             ]];
             assert_eq!(parse(tokens), expected);
@@ -577,7 +689,7 @@ mod tests {
         fn test_blocks_3() {
             let tokens = tokenize(String::from("{ if true then { a }; b }"));
             let expected = rast![blast![
-                ifast!(Ast::BoolLiteral { value: true }, blast![idast!("a")]),
+                ifast!(boast!(true), blast![idast!("a")]),
                 idast!("b")
             ]];
             assert_eq!(parse(tokens), expected);
@@ -586,7 +698,7 @@ mod tests {
         fn test_blocks_4() {
             let tokens = tokenize(String::from("{ if true then { a }; b; c }"));
             let expected = rast![blast![
-                ifast!(Ast::BoolLiteral { value: true }, blast![idast!("a")]),
+                ifast!(boast!(true), blast![idast!("a")]),
                 idast!("b"),
                 idast!("c")
             ]];
@@ -596,11 +708,7 @@ mod tests {
         fn test_blocks_5() {
             let tokens = tokenize(String::from("{ if true then { a } else { b } 3 }"));
             let expected = rast![blast![
-                ifast!(
-                    Ast::BoolLiteral { value: true },
-                    blast![idast!("a")],
-                    blast![idast!("b")]
-                ),
+                ifast!(boast!(true), blast![idast!("a")], blast![idast!("b")]),
                 iast!(3)
             ]];
             assert_eq!(parse(tokens), expected);

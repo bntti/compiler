@@ -1,5 +1,7 @@
 use regex::{Captures, Regex};
 
+use crate::{loc, util::Location};
+
 #[derive(PartialEq, Debug, Clone)]
 pub enum TokenType {
     Identifier,
@@ -13,7 +15,7 @@ pub enum TokenType {
 pub struct Token {
     pub token_type: TokenType,
     pub value: String,
-    pub location: (usize, usize),
+    pub location: Location,
 }
 
 // Returns (capture_str, number_of_newlines, last_newline_pos)
@@ -88,7 +90,7 @@ pub fn tokenize(source_code: String) -> Vec<Token> {
             tokens.push(Token {
                 token_type: TokenType::Identifier,
                 value: text,
-                location: (line_num, col_num),
+                location: loc!(line_num, col_num),
             });
             continue;
         }
@@ -101,7 +103,7 @@ pub fn tokenize(source_code: String) -> Vec<Token> {
             tokens.push(Token {
                 token_type: TokenType::Integer,
                 value: text,
-                location: (line_num, col_num),
+                location: loc!(line_num, col_num),
             });
             continue;
         }
@@ -114,7 +116,7 @@ pub fn tokenize(source_code: String) -> Vec<Token> {
             tokens.push(Token {
                 token_type: TokenType::Operator,
                 value: text,
-                location: (line_num, col_num),
+                location: loc!(line_num, col_num),
             });
             continue;
         }
@@ -127,7 +129,7 @@ pub fn tokenize(source_code: String) -> Vec<Token> {
             tokens.push(Token {
                 token_type: TokenType::Punctuation,
                 value: text,
-                location: (line_num, col_num),
+                location: loc!(line_num, col_num),
             });
             continue;
         }
@@ -147,7 +149,8 @@ mod tests {
         for i in 0..tokens.len() {
             assert_eq!(tokens[i].token_type, expected[i].0);
             assert_eq!(tokens[i].value, expected[i].1.to_string());
-            assert_eq!(tokens[i].location, expected[i].2);
+            assert_eq!(tokens[i].location.row, expected[i].2 .0);
+            assert_eq!(tokens[i].location.col, expected[i].2 .1);
         }
     }
 
