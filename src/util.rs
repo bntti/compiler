@@ -2,7 +2,9 @@ use crate::parser::Ast;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Location {
+    #[allow(dead_code)] // Not expect because buggy?
     pub row: usize,
+    #[allow(dead_code)] // Not expect because buggy?
     pub col: usize,
 }
 
@@ -23,7 +25,7 @@ pub fn ast_loc(ast: &Ast) -> Location {
         } => *loc,
         Ast::Block { stats, loc } => *loc,
         Ast::BoolLiteral { val, loc } => *loc,
-        Ast::Function { params, loc } => *loc,
+        Ast::Function { name, params, loc } => *loc,
         Ast::Identifier { name, loc } => *loc,
         Ast::If {
             cond,
@@ -36,7 +38,7 @@ pub fn ast_loc(ast: &Ast) -> Location {
         Ast::Negate { stat, loc } => *loc,
         Ast::NoneLiteral { loc } => *loc,
         Ast::Root { stats, loc } => *loc,
-        Ast::Var { stat, loc } => *loc,
+        Ast::Var { name, value, loc } => *loc,
         Ast::While { cond, then, loc } => *loc,
     }
 }

@@ -1,4 +1,6 @@
-use crate::{interpreter::interpret, parser, tokenizer};
+use crate::{interpreter::run_interpret, parser, tokenizer};
+
+const INTERPRET: bool = true;
 
 pub fn compile(source_code: String) -> String {
     let tokens = tokenizer::tokenize(source_code);
@@ -15,7 +17,10 @@ pub fn compile(source_code: String) -> String {
     let ast = parser::parse(tokens);
     println!("{ast:?}");
 
-    interpret(&ast);
+    if INTERPRET {
+        println!();
+        run_interpret(&ast);
+    }
 
     println!(); // Extra newline to make reading output easier
     todo!("Implement the rest of the compile process")

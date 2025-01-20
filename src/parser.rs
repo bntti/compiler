@@ -15,6 +15,7 @@ pub enum Ast {
         loc: Location,
     },
     Function {
+        name: String,
         params: Vec<Ast>,
         loc: Location,
     },
@@ -34,7 +35,8 @@ pub enum Ast {
         loc: Location,
     },
     Var {
-        stat: Box<Ast>,
+        name: String,
+        value: Box<Ast>,
         loc: Location,
     },
     While {
@@ -211,21 +213,18 @@ fn parse_line(tokens: &Vec<Token>, pos: &mut usize) -> Ast {
         "var" => {
             let var_token = consume(tokens, pos, Expected::String(String::from("var")));
             let identifier = consume(tokens, pos, Expected::Token(TokenType::Identifier));
-            let left = Ast::Identifier {
-                name: identifier.value,
-                loc: identifier.location,
-            };
+            let var_name = identifier.value.clone(); // Inoptimal?
+                                                     // let left = Ast::Identifier {
+                                                     //     name: identifier.value,
+                                                     //     loc: identifier.location,
+                                                     // };
 
-            let op = consume(tokens, pos, Expected::String(String::from("=")));
-            let right = parse_expression(tokens, pos, 0);
+            consume(tokens, pos, Expected::String(String::from("=")));
+            let value = parse_expression(tokens, pos, 0);
 
             Ast::Var {
-                stat: Box::new(Ast::BinaryOp {
-                    left: Box::new(left),
-                    op: String::from("="),
-                    right: Box::new(right),
-                    loc: op.location,
-                }),
+                name: var_name,
+                value: Box::new(value),
                 loc: var_token.location,
             }
         }
@@ -374,6 +373,7 @@ fn parse_term(tokens: &Vec<Token>, pos: &mut usize) -> Ast {
         TokenType::Integer => return parse_int_literal(tokens, pos),
         TokenType::Identifier => {
             let id_token = consume(tokens, pos, Expected::Token(TokenType::Identifier));
+            let name = id_token.value.clone(); // Inoptimal?
 
             let identifier = match id_token.value.as_str() {
                 "true" => Ast::BoolLiteral {
@@ -412,6 +412,7 @@ fn parse_term(tokens: &Vec<Token>, pos: &mut usize) -> Ast {
                 if peek(tokens, *pos).value == ")" {
                     consume(tokens, pos, Expected::String(String::from(")")));
                     return Ast::Function {
+                        name,
                         params,
                         loc: id_token.location,
                     };
@@ -456,7 +457,7 @@ mod tests {
             Ast::Function{params: Vec::new, loc: loc!()}
         );
         ($($x:expr),+ $(,)?) => (
-            Ast::Function{params: vec![$($x),+], loc: loc!()}
+            Ast::Function{name: String::from("f"), params: vec![$($x),+], loc: loc!()}
         );    }
     // BinaryOp
     macro_rules! bast {
@@ -504,9 +505,10 @@ mod tests {
     }
     // Var
     macro_rules! vast {
-        ($ast: expr) => {
+        ($name: expr, $ast: expr) => {
             Ast::Var {
-                stat: Box::new($ast),
+                name: $name.to_owned(),
+                value: Box::new($ast),
                 loc: loc!(),
             }
         };
@@ -594,16 +596,13 @@ mod tests {
     #[test]
     fn test_var() {
         let tokens = tokenize(String::from("var x = 2;"));
-        let expected = rast![vast!(bast![idast!("x"), "=", iast!(2)])];
+        let expected = rast![vast!("x", iast!(2))];
         assert_eq!(parse(tokens), expected);
     }
     #[test]
     fn test_while() {
         let tokens = tokenize(String::from("while x do { var y = 2; };"));
-        let expected = rast![wast!(
-            idast!("x"),
-            blast![vast!(bast![idast!("y"), "=", iast!(2)]), nast!()]
-        )];
+        let expected = rast![wast!(idast!("x"), blast![vast!("y", iast!(2)), nast!()])];
         assert_eq!(parse(tokens), expected);
     }
     #[test]

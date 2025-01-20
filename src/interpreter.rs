@@ -1,29 +1,77 @@
+use std::{collections::HashMap, io};
+
 use crate::{parser::Ast, util::ast_loc};
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Value {
     None,
     Int(i64),
     Bool(bool),
 }
 
-pub fn interpret(node: &Ast) -> Value {
+pub fn run_interpret(ast: &Ast) -> Value {
+    let mut variables: Vec<HashMap<String, Value>> = Vec::new();
+    interpret(ast, &mut variables)
+}
+
+fn interpret(node: &Ast, variables: &mut Vec<HashMap<String, Value>>) -> Value {
     #[expect(unused_variables)]
     match node {
         Ast::NoneLiteral { loc } => Value::None,
         Ast::IntLiteral { val, loc } => Value::Int(*val),
         Ast::BoolLiteral { val, loc } => Value::Bool(*val),
-        Ast::Minus { stat, loc } => Value::Int(-interpret_int(stat)),
-        Ast::Negate { stat, loc } => Value::Bool(!interpret_bool(stat)),
-        Ast::Root { stats, loc } => interpret(&Ast::Block {
-            stats: stats.to_vec(), // Inoptimal, too lazy to make duplicate code
-            loc: *loc,
-        }), // Identical code
+        Ast::Minus { stat, loc } => Value::Int(-interpret_int(stat, variables)),
+        Ast::Negate { stat, loc } => Value::Bool(!interpret_bool(stat, variables)),
+        Ast::Root { stats, loc } => interpret(
+            &Ast::Block {
+                stats: stats.to_vec(), // Inoptimal, too lazy to make duplicate code
+                loc: *loc,
+            },
+            variables,
+        ), // Identical code
 
-        Ast::Function { params, loc } => todo!(),
+        Ast::Function { name, params, loc } => match name.as_str() {
+            "print_int" => {
+                assert!(params.len() == 1);
+                let value = interpret_int(&params[0], variables);
+                println!("{value}");
+                Value::None
+            }
+            "print_bool" => {
+                assert!(params.len() == 1);
+                let value = interpret_bool(&params[0], variables);
+                println!("{value}");
+                Value::None
+            }
+            "read_int" => {
+                let mut input_line = String::new();
+                io::stdin()
+                    .read_line(&mut input_line)
+                    .expect("Failed to read line");
+                Value::Int(
+                    input_line
+                        .trim()
+                        .parse::<i64>()
+                        .expect("Input not an integer"),
+                )
+            }
+            _ => panic!("{loc:?}: Unknown function \"{name}\""),
+        },
 
-        Ast::Var { stat, loc } => todo!(),
-        Ast::Identifier { name, loc } => todo!(),
+        Ast::Var { name, value, loc } => {
+            let value = interpret_val(value, variables);
+            variables.last_mut().unwrap().insert(name.clone(), value);
+            Value::None
+        }
+
+        Ast::Identifier { name, loc } => {
+            for map in variables.iter().rev() {
+                if map.contains_key(name) {
+                    return map.get(name).unwrap().clone();
+                }
+            }
+            panic!("{loc:?}: Unknown variable \"{name}\"");
+        }
 
         Ast::If {
             cond,
@@ -31,33 +79,34 @@ pub fn interpret(node: &Ast) -> Value {
             els,
             loc,
         } => {
-            let cond_val = match interpret(cond) {
+            let cond_val = match interpret(cond, variables) {
                 Value::Bool(val) => val,
                 _ => panic!("{loc:?}: Expected boolean"),
             };
             if cond_val {
-                return interpret(then);
+                return interpret(then, variables);
             }
             match &**els {
-                Some(node) => interpret(node),
+                Some(node) => interpret(node, variables),
                 None => Value::None,
             }
         }
 
         Ast::While { cond, then, loc } => {
-            while interpret_bool(cond) {
-                interpret(then);
+            while interpret_bool(cond, variables) {
+                interpret(then, variables);
             }
             Value::None
         }
 
         Ast::Block { stats, loc: _ } => {
             let len = &stats.len();
+            variables.push(HashMap::new());
             for (i, stat) in stats.iter().enumerate() {
                 if i == len - 1 {
-                    return interpret(stat);
+                    return interpret(stat, variables);
                 }
-                interpret(stat);
+                interpret(stat, variables);
             }
             Value::None // Empty block
         }
@@ -68,66 +117,63 @@ pub fn interpret(node: &Ast) -> Value {
             right,
             loc,
         } => match op.as_str() {
-            "=" => todo!(),
-            "or" => Value::Bool(interpret_bool(left) || interpret_bool(right)),
-            "and" => Value::Bool(interpret_bool(left) && interpret_bool(right)),
-            "==" => Value::Bool(interpret_value(left) == interpret_value(right)),
-            "!=" => Value::Bool(interpret_value(left) != interpret_value(right)),
-            "<" => Value::Bool(interpret_int(left) < interpret_int(right)),
-            "<=" => Value::Bool(interpret_int(left) <= interpret_int(right)),
-            ">" => Value::Bool(interpret_int(left) > interpret_int(right)),
-            ">=" => Value::Bool(interpret_int(left) >= interpret_int(right)),
-            "+" => Value::Int(interpret_int(left) + interpret_int(right)),
-            "-" => Value::Int(interpret_int(left) - interpret_int(right)),
-            "*" => Value::Int(interpret_int(left) * interpret_int(right)),
-            "/" => Value::Int(interpret_int(left) / interpret_int(right)),
-            "%" => Value::Int(interpret_int(left) % interpret_int(right)),
+            "=" => {
+                let name = match &**left {
+                    Ast::Identifier { name, loc } => name,
+                    _ => panic!("{loc:?}: Expected left side of = to be an identifier"),
+                };
+                let value = interpret_val(right, variables);
+                for map in variables.iter_mut().rev() {
+                    if map.contains_key(name) {
+                        map.insert(name.clone(), value.clone());
+                        return value;
+                    }
+                }
+                panic!("{loc:?}: Unknown variable \"{name}\"");
+            }
+            "or" => {
+                Value::Bool(interpret_bool(left, variables) || interpret_bool(right, variables))
+            }
+            "and" => {
+                Value::Bool(interpret_bool(left, variables) && interpret_bool(right, variables))
+            }
+            "==" => Value::Bool(interpret_val(left, variables) == interpret_val(right, variables)),
+            "!=" => Value::Bool(interpret_val(left, variables) != interpret_val(right, variables)),
+            "<" => Value::Bool(interpret_int(left, variables) < interpret_int(right, variables)),
+            "<=" => Value::Bool(interpret_int(left, variables) <= interpret_int(right, variables)),
+            ">" => Value::Bool(interpret_int(left, variables) > interpret_int(right, variables)),
+            ">=" => Value::Bool(interpret_int(left, variables) >= interpret_int(right, variables)),
+            "+" => Value::Int(interpret_int(left, variables) + interpret_int(right, variables)),
+            "-" => Value::Int(interpret_int(left, variables) - interpret_int(right, variables)),
+            "*" => Value::Int(interpret_int(left, variables) * interpret_int(right, variables)),
+            "/" => Value::Int(interpret_int(left, variables) / interpret_int(right, variables)),
+            "%" => Value::Int(interpret_int(left, variables) % interpret_int(right, variables)),
             _ => panic!("{loc:?}: Invalid operator {op}"),
         },
     }
 }
 
-fn interpret_bool(node: &Ast) -> bool {
+fn interpret_bool(node: &Ast, variables: &mut Vec<HashMap<String, Value>>) -> bool {
     let loc = ast_loc(node);
-    match interpret(node) {
+    match interpret(node, variables) {
         Value::Bool(val) => val,
         _ => panic!("{loc:?}: Expected boolean"),
     }
 }
 
-fn interpret_int(node: &Ast) -> i64 {
+fn interpret_int(node: &Ast, variables: &mut Vec<HashMap<String, Value>>) -> i64 {
     let loc = ast_loc(node);
-    match interpret(node) {
+    match interpret(node, variables) {
         Value::Int(val) => val,
         _ => panic!("{loc:?}: Expected integer"),
     }
 }
 
-fn interpret_value(node: &Ast) -> Value {
+fn interpret_val(node: &Ast, variables: &mut Vec<HashMap<String, Value>>) -> Value {
     let loc = ast_loc(node);
-    let value = interpret(node);
+    let value = interpret(node, variables);
     if matches!(value, Value::None) {
         panic!("{loc:?}: Expected boolean or integer");
     }
     value
 }
-
-// case ast.Literal():
-//     return node.value
-
-// case ast.BinaryOp():
-//     a: Any = interpret(node.left)
-//     b: Any = interpret(node.right)
-//     if node.op == '+':
-//         return a + b
-//     elif node.op == '<':
-//         return a < b
-//     else:
-//         raise ...
-
-// case ast.IfThenElse():
-//     if interpret(node.condition):
-//         return interpret(node.then_branch)
-//     else:
-//         return interpret(node.else_branch)
-// ...}

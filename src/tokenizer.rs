@@ -35,7 +35,7 @@ pub fn tokenize(source_code: String) -> Vec<Token> {
     let comment = Regex::new(r"^(?:\/\/|#)[^\n]*").unwrap();
     let identifier = Regex::new(r"^[a-zA-Z_][a-zA-Z\d_]*").unwrap();
     let integer = Regex::new(r"^\d+").unwrap(); // Allow leading zeroes
-    let operator = Regex::new(r"^(?:\+|\-|\*|\/|==?|!=|<=?|>=?)").unwrap();
+    let operator = Regex::new(r"^(?:\+|\-|\*|\/|%|==?|!=|<=?|>=?)").unwrap();
     let punctuation = Regex::new(r"^(?:\(|\)|\{|\}|,|;)").unwrap();
 
     let mut last_newline = 0;
