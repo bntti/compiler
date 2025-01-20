@@ -38,8 +38,8 @@ pub enum Ast {
         loc: Location,
     },
     While {
-        left: Box<Ast>,
-        right: Box<Ast>,
+        cond: Box<Ast>,
+        then: Box<Ast>,
         loc: Location,
     },
     If {
@@ -195,7 +195,7 @@ fn parse_block(tokens: &Vec<Token>, pos: &mut usize, parent: Ast) -> Ast {
 
                 // Don't require ';' after braces
                 if !semi && peek_back(tokens, *pos).value != "}" {
-                    panic!("{location:?} expected ';'");
+                    panic!("{location:?}: expected ';'");
                 }
             }
             panic!("Unexpected end of code, missing '}}'");
@@ -231,10 +231,10 @@ fn parse_line(tokens: &Vec<Token>, pos: &mut usize) -> Ast {
         }
         "while" => {
             let while_token = consume(tokens, pos, Expected::String(String::from("while")));
-            let left = parse_expression(tokens, pos, 0);
+            let cond = parse_expression(tokens, pos, 0);
             consume(tokens, pos, Expected::String(String::from("do")));
             let brace_token = consume(tokens, pos, Expected::String(String::from("{")));
-            let right = parse_block(
+            let then = parse_block(
                 tokens,
                 pos,
                 Ast::Block {
@@ -243,8 +243,8 @@ fn parse_line(tokens: &Vec<Token>, pos: &mut usize) -> Ast {
                 },
             );
             Ast::While {
-                left: Box::new(left),
-                right: Box::new(right),
+                cond: Box::new(cond),
+                then: Box::new(then),
                 loc: while_token.location,
             }
         }
@@ -278,7 +278,7 @@ fn parse_expression(tokens: &Vec<Token>, pos: &mut usize, level: usize) -> Ast {
     // Special case for equality
     if token.value == *"=" && level == 0 {
         if !matches!(left, Ast::Identifier { name: _, loc: _ }) {
-            panic!("({location:?}) Expected variable")
+            panic!("{location:?}: Expected variable")
         }
 
         let op = consume(tokens, pos, Expected::String(String::from("=")));
@@ -422,7 +422,7 @@ fn parse_term(tokens: &Vec<Token>, pos: &mut usize) -> Ast {
         }
         _ => {}
     }
-    panic!("{location:?}, Expected expression");
+    panic!("{location:?}: Expected expression");
 }
 
 #[cfg(test)]
@@ -515,8 +515,8 @@ mod tests {
     macro_rules! wast {
         ($left: expr, $right: expr) => {
             Ast::While {
-                left: Box::new($left),
-                right: Box::new($right),
+                cond: Box::new($left),
+                then: Box::new($right),
                 loc: loc!(),
             }
         };
