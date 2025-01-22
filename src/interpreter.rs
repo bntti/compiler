@@ -17,20 +17,26 @@ pub fn run_interpret(ast: &Ast) -> Value {
 fn interpret(node: &Ast, variables: &mut Vec<HashMap<String, Value>>) -> Value {
     #[expect(unused_variables)]
     match node {
-        Ast::NoneLiteral { loc } => Value::None,
-        Ast::IntLiteral { val, loc } => Value::Int(*val),
-        Ast::BoolLiteral { val, loc } => Value::Bool(*val),
-        Ast::Minus { stat, loc } => Value::Int(-interpret_int(stat, variables)),
-        Ast::Negate { stat, loc } => Value::Bool(!interpret_bool(stat, variables)),
-        Ast::Root { stats, loc } => interpret(
+        Ast::NoneLiteral { typ, loc } => Value::None,
+        Ast::IntLiteral { val, typ, loc } => Value::Int(*val),
+        Ast::BoolLiteral { val, typ, loc } => Value::Bool(*val),
+        Ast::Minus { stat, typ, loc } => Value::Int(-interpret_int(stat, variables)),
+        Ast::Negate { stat, typ, loc } => Value::Bool(!interpret_bool(stat, variables)),
+        Ast::Root { stats, typ, loc } => interpret(
             &Ast::Block {
-                stats: stats.to_vec(), // Inoptimal, too lazy to make duplicate code
+                stats: stats.clone(), // Inoptimal, too lazy to make duplicate code
+                typ: typ.clone(),
                 loc: *loc,
             },
             variables,
         ), // Identical code
 
-        Ast::Function { name, params, loc } => match name.as_str() {
+        Ast::Function {
+            name,
+            params,
+            typ,
+            loc,
+        } => match name.as_str() {
             "print_int" => {
                 assert!(params.len() == 1);
                 let value = interpret_int(&params[0], variables);
@@ -58,13 +64,18 @@ fn interpret(node: &Ast, variables: &mut Vec<HashMap<String, Value>>) -> Value {
             _ => panic!("{loc:?}: Unknown function \"{name}\""),
         },
 
-        Ast::Var { name, value, loc } => {
+        Ast::Var {
+            name,
+            value,
+            typ,
+            loc,
+        } => {
             let value = interpret_val(value, variables);
             variables.last_mut().unwrap().insert(name.clone(), value);
             Value::None
         }
 
-        Ast::Identifier { name, loc } => {
+        Ast::Identifier { name, typ, loc } => {
             for map in variables.iter().rev() {
                 if map.contains_key(name) {
                     return map.get(name).unwrap().clone();
@@ -77,6 +88,7 @@ fn interpret(node: &Ast, variables: &mut Vec<HashMap<String, Value>>) -> Value {
             cond,
             then,
             els,
+            typ,
             loc,
         } => {
             let cond_val = match interpret(cond, variables) {
@@ -92,14 +104,19 @@ fn interpret(node: &Ast, variables: &mut Vec<HashMap<String, Value>>) -> Value {
             }
         }
 
-        Ast::While { cond, then, loc } => {
+        Ast::While {
+            cond,
+            then,
+            typ,
+            loc,
+        } => {
             while interpret_bool(cond, variables) {
                 interpret(then, variables);
             }
             Value::None
         }
 
-        Ast::Block { stats, loc: _ } => {
+        Ast::Block { stats, typ, loc } => {
             let len = &stats.len();
             variables.push(HashMap::new());
             for (i, stat) in stats.iter().enumerate() {
@@ -115,11 +132,12 @@ fn interpret(node: &Ast, variables: &mut Vec<HashMap<String, Value>>) -> Value {
             left,
             op,
             right,
+            typ,
             loc,
         } => match op.as_str() {
             "=" => {
                 let name = match &**left {
-                    Ast::Identifier { name, loc } => name,
+                    Ast::Identifier { name, typ, loc } => name,
                     _ => panic!("{loc:?}: Expected left side of = to be an identifier"),
                 };
                 let value = interpret_val(right, variables);

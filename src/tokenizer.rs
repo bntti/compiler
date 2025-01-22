@@ -36,7 +36,7 @@ pub fn tokenize(source_code: String) -> Vec<Token> {
     let identifier = Regex::new(r"^[a-zA-Z_][a-zA-Z\d_]*").unwrap();
     let integer = Regex::new(r"^\d+").unwrap(); // Allow leading zeroes
     let operator = Regex::new(r"^(?:\+|\-|\*|\/|%|==?|!=|<=?|>=?)").unwrap();
-    let punctuation = Regex::new(r"^(?:\(|\)|\{|\}|,|;)").unwrap();
+    let punctuation = Regex::new(r"^(?:\(|\)|\{|\}|,|;|:)").unwrap();
 
     let mut last_newline = 0;
     let mut tokens: Vec<Token> = Vec::new();
@@ -133,6 +133,8 @@ pub fn tokenize(source_code: String) -> Vec<Token> {
             });
             continue;
         }
+
+        panic!("Unknown token starting from {substr}");
     }
 
     tokens

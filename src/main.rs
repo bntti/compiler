@@ -2,6 +2,7 @@ mod compiler;
 mod interpreter;
 mod parser;
 mod tokenizer;
+mod typechecker;
 mod util;
 
 use base64::prelude::*;
