@@ -12,11 +12,12 @@ pub fn compile(source_code: String) -> String {
 
     println!(); // Extra newline to make reading output easier
 
-    // Debug print
+    println!("Tokenizer output:");
     for token in &tokens {
         let text = &token.value;
         print!("{text} ");
     }
+    println!();
     println!();
 
     let mut ast = parser::parse(tokens);
@@ -30,7 +31,12 @@ pub fn compile(source_code: String) -> String {
 
     run_typecheck(&mut ast);
     let ir = run_ir_gen(ast);
-    println!("{ir:?}");
+
+    println!("IR generator output:");
+    for ins in ir.iter() {
+        println!("{ins}");
+    }
+
     println!(); // Extra newline to make reading output easier
     todo!("Implement the rest of the compile process")
 }

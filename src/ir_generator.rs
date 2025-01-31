@@ -1,23 +1,12 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt::Display};
 
-use crate::{parser, util::Location};
-
-#[derive(Clone)]
-enum Type {
-    Int,
-    Bool,
-    Unit,
-}
+use crate::{
+    parser::{Ast, Type},
+    util::Location,
+};
 
 #[derive(Clone, Hash, PartialEq, Eq, Debug)]
 pub struct IRVar(String);
-
-#[derive(Debug)]
-#[expect(dead_code)]
-pub struct Label {
-    loc: Location,
-    name: String,
-}
 
 #[derive(Debug)]
 #[expect(dead_code)]
@@ -45,25 +34,90 @@ pub enum Instruction {
     },
     Jump {
         loc: Location,
-        label: Label,
+        label: Box<Instruction>,
     },
     CondJump {
         loc: Location,
         cond: IRVar,
-        then_label: Label,
-        else_label: Label,
+        then_label: Box<Instruction>,
+        else_label: Box<Instruction>,
     },
-    // Label {
-    //     name:String,
-    // }
+    Label {
+        loc: Location,
+        name: String,
+    },
 }
 
-pub fn run_ir_gen(root_ast: parser::Ast) -> Vec<Instruction> {
-    let root_types = HashMap::new();
+impl Display for IRVar {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let name = &self.0;
+        write!(f, "{name}")
+    }
+}
+
+impl Display for Instruction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        #[expect(unused_variables)]
+        match self {
+            Instruction::LoadBoolConst { loc, value, dest } => {
+                write!(f, "LoadBoolConst({value}, {dest})")
+            }
+            Instruction::LoadIntConst { loc, value, dest } => {
+                write!(f, "LoadIntConst({value}, {dest})")
+            }
+            Instruction::Copy { loc, source, dest } => {
+                write!(f, "Copy({source}, {dest})")
+            }
+            Instruction::Call {
+                loc,
+                fun,
+                args,
+                dest,
+            } => {
+                let args = args
+                    .iter()
+                    .map(|arg| format!("{arg}"))
+                    .collect::<Vec<String>>()
+                    .join(", ");
+                write!(f, "Call({fun}, [{args}], {dest})")
+            }
+            Instruction::Jump { loc, label } => {
+                write!(f, "Jump({label})")
+            }
+            Instruction::CondJump {
+                loc,
+                cond,
+                then_label,
+                else_label,
+            } => {
+                write!(f, "CondJump({cond}, {then_label}, {else_label})")
+            }
+            Instruction::Label { loc, name } => {
+                write!(f, "{name}")
+            }
+        }
+    }
+}
+
+pub fn run_ir_gen(root_ast: Ast) -> Vec<Instruction> {
+    // The type is actually not Unit, but we do not need the type for now
+    let root_types = HashMap::from([
+        (IRVar(String::from("or")), Type::Unit),
+        (IRVar(String::from("and")), Type::Unit),
+        (IRVar(String::from("<")), Type::Unit),
+        (IRVar(String::from("<=")), Type::Unit),
+        (IRVar(String::from(">")), Type::Unit),
+        (IRVar(String::from(">=")), Type::Unit),
+        (IRVar(String::from("+")), Type::Unit),
+        (IRVar(String::from("-")), Type::Unit),
+        (IRVar(String::from("*")), Type::Unit),
+        (IRVar(String::from("/")), Type::Unit),
+        (IRVar(String::from("%")), Type::Unit),
+    ]);
     generate_ir(root_types, root_ast)
 }
 
-fn generate_ir(root_types: HashMap<IRVar, Type>, root_ast: parser::Ast) -> Vec<Instruction> {
+fn generate_ir(root_types: HashMap<IRVar, Type>, root_ast: Ast) -> Vec<Instruction> {
     let mut var_types = root_types.clone();
     let var_unit = IRVar(String::from("unit"));
     var_types.insert(var_unit, Type::Unit);
@@ -80,7 +134,7 @@ fn generate_ir(root_types: HashMap<IRVar, Type>, root_ast: parser::Ast) -> Vec<I
         &mut var_types,
         &mut root_symbol_table,
         &mut free,
-        root_ast,
+        &root_ast,
     );
 
     match var_types[&var_final_result] {
@@ -93,7 +147,7 @@ fn generate_ir(root_types: HashMap<IRVar, Type>, root_ast: parser::Ast) -> Vec<I
 }
 
 fn new_var(var_types: &mut HashMap<IRVar, Type>, free: &mut usize, t: Type) -> IRVar {
-    let var = IRVar(free.to_string());
+    let var = IRVar(String::from("x") + &free.to_string());
     *free += 1;
     var_types.insert(var.clone(), t);
     var
@@ -104,68 +158,127 @@ fn visit(
     var_types: &mut HashMap<IRVar, Type>,
     sym_table: &mut Vec<HashMap<String, IRVar>>,
     free: &mut usize,
-    ast: parser::Ast,
+    ast: &Ast,
 ) -> IRVar {
     #[expect(unused_variables)]
     match ast {
-        parser::Ast::NoneLiteral { typ, loc } => IRVar(String::from("unit")),
-        parser::Ast::BoolLiteral { val, typ, loc } => {
+        Ast::NoneLiteral { typ, loc } => IRVar(String::from("unit")),
+        Ast::BoolLiteral { val, typ, loc } => {
             let var = new_var(var_types, free, Type::Bool);
             ins.push(Instruction::LoadBoolConst {
-                loc,
-                value: val,
+                loc: *loc,
+                value: *val,
                 dest: var.clone(),
             });
             var
         }
-        parser::Ast::IntLiteral { val, typ, loc } => {
+        Ast::IntLiteral { val, typ, loc } => {
             let var = new_var(var_types, free, Type::Int);
             ins.push(Instruction::LoadIntConst {
-                loc,
-                value: val,
+                loc: *loc,
+                value: *val,
                 dest: var.clone(),
             });
             var
         }
-        parser::Ast::Identifier { name, typ, loc } => {
+        Ast::Identifier { name, typ, loc } => {
             for map in sym_table.iter().rev() {
-                if map.contains_key(&name) {
-                    return map[&name].clone();
+                if map.contains_key(name) {
+                    return map[name].clone();
                 }
             }
             unreachable!();
         }
-        parser::Ast::BinaryOp {
+        Ast::BinaryOp {
             left,
             op,
             right,
             typ,
             loc,
-        } => todo!(),
-        parser::Ast::Block { stats, typ, loc } => todo!(),
-        parser::Ast::Function {
+        } => {
+            let var_op = sym_table[0][op].clone();
+            let var_left = visit(ins, var_types, sym_table, free, left);
+            let var_right = visit(ins, var_types, sym_table, free, right);
+            let var_result = new_var(var_types, free, typ.clone());
+            ins.push(Instruction::Call {
+                loc: *loc,
+                fun: var_op,
+                args: vec![var_left, var_right],
+                dest: var_result.clone(),
+            });
+            var_result
+        }
+        Ast::Minus { stat, typ, loc } => {
+            let var_op = sym_table[0][&String::from("minus")].clone();
+            let var_value = visit(ins, var_types, sym_table, free, stat);
+            let var_result = new_var(var_types, free, typ.clone());
+            ins.push(Instruction::Call {
+                loc: *loc,
+                fun: var_op,
+                args: vec![var_value],
+                dest: var_result.clone(),
+            });
+            var_result
+        }
+        Ast::Negate { stat, typ, loc } => {
+            let var_op = sym_table[0][&String::from("neg")].clone();
+            let var_value = visit(ins, var_types, sym_table, free, stat);
+            let var_result = new_var(var_types, free, typ.clone());
+            ins.push(Instruction::Call {
+                loc: *loc,
+                fun: var_op,
+                args: vec![var_value],
+                dest: var_result.clone(),
+            });
+            var_result
+        }
+
+        Ast::Root { stats, typ, loc } => {
+            visit(
+                ins,
+                var_types,
+                sym_table,
+                free,
+                &Ast::Block {
+                    stats: stats.clone(), // Inoptimal, too lazy to make duplicate code
+                    typ: typ.clone(),
+                    loc: *loc,
+                },
+            )
+        }
+        Ast::Block { stats, typ, loc } => {
+            let len = &stats.len();
+            sym_table.push(HashMap::new());
+            for (i, stat) in stats.iter().enumerate() {
+                if i == len - 1 {
+                    return visit(ins, var_types, sym_table, free, stat);
+                }
+                visit(ins, var_types, sym_table, free, stat);
+            }
+            IRVar(String::from("unit")) // Empty block
+        }
+
+        // Unimplemented
+        Ast::Function {
             name,
             params,
             typ,
             loc,
         } => todo!(),
-        parser::Ast::If {
+        Ast::If {
             cond,
             then,
             els,
             typ,
             loc,
         } => todo!(),
-        parser::Ast::Minus { stat, typ, loc } => todo!(),
-        parser::Ast::Negate { stat, typ, loc } => todo!(),
-        parser::Ast::Root { stats, typ, loc } => todo!(),
-        parser::Ast::Var {
+        Ast::Var {
             name,
             value,
             typ,
             loc,
         } => todo!(),
-        parser::Ast::While {
+        Ast::While {
             cond,
             then,
             typ,
