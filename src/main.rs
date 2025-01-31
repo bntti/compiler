@@ -1,5 +1,6 @@
 mod compiler;
 mod interpreter;
+mod ir_generator;
 mod parser;
 mod tokenizer;
 mod typechecker;

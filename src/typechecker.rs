@@ -107,7 +107,7 @@ fn typecheck(node: &mut Ast, variables: &mut Vec<HashMap<String, Type>>) -> Type
             loc,
         } => {
             let mut fn_type = Type::Unk;
-            for map in variables.iter_mut().rev() {
+            for map in variables.iter().rev() {
                 if map.contains_key(name) {
                     fn_type = map[name].clone();
                     break;
@@ -287,7 +287,7 @@ fn typecheck(node: &mut Ast, variables: &mut Vec<HashMap<String, Type>>) -> Type
                         *typ = *ret.clone();
                         *ret
                     }
-                    _ => panic!("Shouldn't happen"),
+                    _ => unreachable!(),
                 }
             }
         },
