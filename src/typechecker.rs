@@ -7,7 +7,7 @@ use crate::{
 
 pub fn run_typecheck(ast: &mut Ast) {
     let bool_bin_fn = Type::Function {
-        params: vec![Type::Int, Type::Int],
+        params: vec![Type::Bool, Type::Bool],
         ret: Box::new(Type::Int),
     };
     let int_bin_fn = Type::Function {
@@ -272,7 +272,7 @@ fn typecheck(node: &mut Ast, variables: &mut Vec<HashMap<String, Type>>) -> Type
                         ret,
                     } => {
                         let left_type = typecheck(left, variables);
-                        let right_type = typecheck(left, variables);
+                        let right_type = typecheck(right, variables);
                         let left_loc = ast_loc(left);
                         let right_loc = ast_loc(right);
 
