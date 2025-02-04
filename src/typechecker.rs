@@ -189,7 +189,7 @@ fn typecheck(node: &mut Ast, variables: &mut Vec<HashMap<String, Type>>) -> Type
                     }
                     then_type
                 }
-                None => then_type,
+                None => Type::Unit,
             }
         }
 

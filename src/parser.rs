@@ -175,22 +175,48 @@ fn parse_block(tokens: &Vec<Token>, pos: &mut usize, parent: Ast) -> Ast {
         Ast::Root {
             stats: _,
             typ: _,
-            loc: location,
+            loc: block_location,
         } => {
             while peek(tokens, *pos).token_type != TokenType::End {
                 statements.push(parse_line(tokens, pos));
 
-                // Don't require ';' after braces
-                if peek_back(tokens, *pos).value == "}" && peek(tokens, *pos).value != ";" {
-                    continue;
+                let mut semi = false;
+                let token = peek(tokens, *pos);
+                let location = token.location;
+                if token.value.as_str() == ";" {
+                    consume(tokens, pos, Expected::Semi);
+                    semi = true;
                 }
 
-                consume(tokens, pos, Expected::Semi);
+                let token = peek(tokens, *pos);
+                if matches!(token.token_type, TokenType::End) {
+                    if semi {
+                        statements.push(Ast::NoneLiteral {
+                            typ: Type::Unk,
+                            loc: location,
+                        });
+                    }
+                    return Ast::Root {
+                        stats: statements,
+                        typ: Type::Unk,
+                        loc: block_location,
+                    };
+                }
+
+                // Don't require ';' after braces
+                if !semi && peek_back(tokens, *pos).value != "}" {
+                    panic!("{location:?}: expected ';'");
+                }
             }
+
+            // Only happens if empty root block
             Ast::Root {
-                stats: statements,
+                stats: vec![Ast::NoneLiteral {
+                    typ: Type::Unk,
+                    loc: block_location,
+                }],
                 typ: Type::Unk,
-                loc: location,
+                loc: block_location,
             }
         }
         Ast::Block {
@@ -626,106 +652,145 @@ mod tests {
     #[test]
     fn test_simple_addition() {
         let tokens = tokenize(String::from("1+1;"));
-        let expected = rast![bast![iast!(1), "+", iast!(1)]];
+        let expected = rast![bast![iast!(1), "+", iast!(1)], nast!()];
         assert_eq!(parse(tokens), expected);
     }
 
     #[test]
     fn test_simple_addition_with_identifiers() {
         let tokens = tokenize(String::from("x-50;"));
-        let expected = rast![bast![idast!("x"), "-", iast!(50)]];
+        let expected = rast![bast![idast!("x"), "-", iast!(50)], nast!()];
         assert_eq!(parse(tokens), expected);
     }
 
     #[test]
     fn test_multiple_additions() {
         let tokens = tokenize(String::from("2-3+4;"));
-        let expected = rast![bast![bast![iast!(2), "-", iast!(3)], "+", iast!(4)]];
+        let expected = rast![
+            bast![bast![iast!(2), "-", iast!(3)], "+", iast!(4)],
+            nast!()
+        ];
         assert_eq!(parse(tokens), expected);
     }
 
     #[test]
     fn test_multiplication() {
         let tokens = tokenize(String::from("1*2/3;"));
-        let expected = rast![bast![bast![iast!(1), "*", iast!(2)], "/", iast!(3)]];
+        let expected = rast![
+            bast![bast![iast!(1), "*", iast!(2)], "/", iast!(3)],
+            nast!()
+        ];
         assert_eq!(parse(tokens), expected);
     }
 
     #[test]
     fn test_multiplication_and_addition() {
         let tokens = tokenize(String::from("1+2*3;"));
-        let expected = rast![bast![iast!(1), "+", bast![iast!(2), "*", iast!(3)]]];
+        let expected = rast![
+            bast![iast!(1), "+", bast![iast!(2), "*", iast!(3)]],
+            nast!()
+        ];
         assert_eq!(parse(tokens), expected);
     }
 
     #[test]
     fn test_parenthesis() {
         let tokens = tokenize(String::from("(1+2)*3;"));
-        let expected = rast![bast![bast![iast!(1), "+", iast!(2)], "*", iast!(3)]];
+        let expected = rast![
+            bast![bast![iast!(1), "+", iast!(2)], "*", iast!(3)],
+            nast!()
+        ];
         assert_eq!(parse(tokens), expected);
     }
 
     #[test]
     fn test_empty() {
         let tokens = tokenize(String::from(""));
-        let expected = rast![];
+        let expected = rast![nast!()];
         assert_eq!(parse(tokens), expected);
     }
 
     #[test]
     fn test_var() {
         let tokens = tokenize(String::from("var x = 2;"));
-        let expected = rast![vast!("x", iast!(2))];
+        let expected = rast![vast!("x", iast!(2)), nast!()];
         assert_eq!(parse(tokens), expected);
     }
     #[test]
     fn test_while() {
-        let tokens = tokenize(String::from("while x do { var y = 2; };"));
+        let tokens = tokenize(String::from("while x do { var y = 2; }"));
         let expected = rast![wast!(idast!("x"), blast![vast!("y", iast!(2)), nast!()])];
         assert_eq!(parse(tokens), expected);
     }
     #[test]
     fn test_equality() {
         let tokens = tokenize(String::from("a = b = c;"));
-        let expected = rast![bast![
-            idast!("a"),
-            "=",
-            bast![idast!("b"), "=", idast!("c")]
-        ]];
+        let expected = rast![
+            bast![idast!("a"), "=", bast![idast!("b"), "=", idast!("c")]],
+            nast!()
+        ];
         assert_eq!(parse(tokens), expected);
     }
     #[test]
     fn test_function_call() {
         let tokens = tokenize(String::from("f(a, b, 1+c);"));
-        let expected = rast![fast![
-            idast!("a"),
-            idast!("b"),
-            bast![iast!(1), "+", idast!("c")]
-        ]];
+        let expected = rast![
+            fast![idast!("a"), idast!("b"), bast![iast!(1), "+", idast!("c")]],
+            nast!()
+        ];
         assert_eq!(parse(tokens), expected);
     }
     #[test]
     fn test_returning_from_block() {
         let tokens = tokenize(String::from("a = {f(a); x=y; f(x)};"));
-        let expected = rast![bast![
-            idast!("a"),
-            "=",
-            blast![
-                fast![idast!("a")],
-                bast![idast!("x"), "=", idast!("y")],
-                fast![idast!("x")]
-            ]
-        ]];
+        let expected = rast![
+            bast![
+                idast!("a"),
+                "=",
+                blast![
+                    fast![idast!("a")],
+                    bast![idast!("x"), "=", idast!("y")],
+                    fast![idast!("x")]
+                ]
+            ],
+            nast!()
+        ];
         assert_eq!(parse(tokens), expected);
     }
     #[test]
     fn test_if() {
         let tokens = tokenize(String::from("a = if b then c else d;"));
-        let expected = rast![bast![
-            idast!("a"),
-            "=",
-            ifast!(idast!("b"), idast!("c"), idast!("d"))
-        ]];
+        let expected = rast![
+            bast![
+                idast!("a"),
+                "=",
+                ifast!(idast!("b"), idast!("c"), idast!("d"))
+            ],
+            nast!()
+        ];
+        assert_eq!(parse(tokens), expected);
+    }
+
+    #[test]
+    fn test_binary_ops() {
+        let tokens = tokenize(String::from("n / 2 == 0;"));
+        let expected = rast![
+            bast!(bast!(idast!("n"), "/", iast!(2)), "==", iast!(0)),
+            nast!()
+        ];
+        assert_eq!(parse(tokens), expected);
+    }
+
+    #[test]
+    fn test_binary_ops_in_if() {
+        let tokens = tokenize(String::from("if n / 2 == 0 then 1;"));
+        let expected = rast![
+            ifast!(
+                bast!(bast!(idast!("n"), "/", iast!(2)), "==", iast!(0)),
+                iast!(1)
+            ),
+            nast!()
+        ];
         assert_eq!(parse(tokens), expected);
     }
 
@@ -742,23 +807,6 @@ mod tests {
     fn test_extra_number() {
         let tokens = tokenize(String::from("1+1 1;"));
         parse(tokens);
-    }
-
-    #[test]
-    fn test_binary_ops() {
-        let tokens = tokenize(String::from("n / 2 == 0;"));
-        let expected = rast![bast!(bast!(idast!("n"), "/", iast!(2)), "==", iast!(0))];
-        assert_eq!(parse(tokens), expected);
-    }
-
-    #[test]
-    fn test_binary_ops_in_if() {
-        let tokens = tokenize(String::from("if n / 2 == 0 then 1;"));
-        let expected = rast![ifast!(
-            bast!(bast!(idast!("n"), "/", iast!(2)), "==", iast!(0)),
-            iast!(1)
-        )];
-        assert_eq!(parse(tokens), expected);
     }
 
     mod block_tests {

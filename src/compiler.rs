@@ -12,16 +12,17 @@ pub fn compile(source_code: String) -> String {
 
     println!(); // Extra newline to make reading output easier
 
-    println!("Tokenizer output:");
+    println!("\x1b[1mTokenizer output:\x1b[0;100m");
     for token in &tokens {
         let text = &token.value;
         print!("{text} ");
     }
+    print!("\x1b[0m");
     println!();
     println!();
 
     let mut ast = parser::parse(tokens);
-    // println!("{ast:?}");
+    // println!("{ast:#?}");
 
     if INTERPRET {
         println!();
@@ -32,10 +33,11 @@ pub fn compile(source_code: String) -> String {
     run_typecheck(&mut ast);
     let ir = run_ir_gen(ast);
 
-    println!("IR generator output:");
+    println!("\x1b[1mIR generator output:\x1b[0;100m");
     for ins in ir.iter() {
         println!("{ins}");
     }
+    println!("\x1b[0m");
 
     println!(); // Extra newline to make reading output easier
     todo!("Implement the rest of the compile process")
