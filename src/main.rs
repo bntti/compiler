@@ -1,3 +1,4 @@
+mod as_generator;
 mod compiler;
 mod interpreter;
 mod ir_generator;

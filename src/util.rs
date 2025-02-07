@@ -1,4 +1,4 @@
-use crate::parser::Ast;
+use crate::{ir_generator::Instruction, parser::Ast};
 
 #[derive(Debug, Clone, Copy)]
 pub struct Location {
@@ -60,9 +60,17 @@ pub fn ast_loc(ast: &Ast) -> Location {
     }
 }
 
+pub fn label_name(ir: &Instruction) -> String {
+    let Instruction::Label { name, .. } = ir else {
+        unreachable!();
+    };
+
+    name.clone()
+}
+
 #[macro_export]
 macro_rules! svec {
-    ($($x:expr),+ $(,)?) => (
+    [$($x:expr),+ $(,)?] => (
         vec![$($x.to_owned()),+]
     )
 }
