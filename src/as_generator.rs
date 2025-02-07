@@ -26,26 +26,15 @@ fn init_locals(instructions: &[Instruction]) -> Locals {
     };
 
     for ins in instructions {
-        #[expect(unused_variables)]
         match ins {
-            Instruction::Call {
-                loc,
-                fun,
-                args,
-                dest,
-            } => add_var(&mut locals, dest.clone()),
-            Instruction::Copy { loc, source, dest } => add_var(&mut locals, dest.clone()),
-            Instruction::LoadBoolConst { loc, value, dest } => add_var(&mut locals, dest.clone()),
-            Instruction::LoadIntConst { loc, value, dest } => add_var(&mut locals, dest.clone()),
+            Instruction::Call { dest, .. } => add_var(&mut locals, dest.clone()),
+            Instruction::Copy { dest, .. } => add_var(&mut locals, dest.clone()),
+            Instruction::LoadBoolConst { dest, .. } => add_var(&mut locals, dest.clone()),
+            Instruction::LoadIntConst { dest, .. } => add_var(&mut locals, dest.clone()),
 
-            Instruction::Label { loc, name } => (),
-            Instruction::CondJump {
-                loc,
-                cond,
-                then_label,
-                else_label,
-            } => (),
-            Instruction::Jump { loc, label } => (),
+            Instruction::Label { .. } => (),
+            Instruction::CondJump { .. } => (),
+            Instruction::Jump { .. } => (),
         }
     }
 

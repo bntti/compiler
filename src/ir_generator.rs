@@ -10,6 +10,7 @@ use crate::{
 pub struct IRVar(String);
 
 #[derive(Debug, Clone)]
+#[expect(dead_code)] // Some loc fields
 pub enum Instruction {
     LoadBoolConst {
         loc: Location,
@@ -57,22 +58,18 @@ impl Display for IRVar {
 
 impl Display for Instruction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        #[expect(unused_variables)]
         match self {
-            Instruction::LoadBoolConst { loc, value, dest } => {
+            Instruction::LoadBoolConst { value, dest, .. } => {
                 write!(f, "LoadBoolConst({value}, {dest})")
             }
-            Instruction::LoadIntConst { loc, value, dest } => {
+            Instruction::LoadIntConst { value, dest, .. } => {
                 write!(f, "LoadIntConst({value}, {dest})")
             }
-            Instruction::Copy { loc, source, dest } => {
+            Instruction::Copy { source, dest, .. } => {
                 write!(f, "Copy({source}, {dest})")
             }
             Instruction::Call {
-                loc,
-                fun,
-                args,
-                dest,
+                fun, args, dest, ..
             } => {
                 let args = args
                     .iter()
@@ -81,18 +78,18 @@ impl Display for Instruction {
                     .join(", ");
                 write!(f, "Call({fun}, [{args}], {dest})")
             }
-            Instruction::Jump { loc, label } => {
+            Instruction::Jump { label, .. } => {
                 write!(f, "Jump({label})")
             }
             Instruction::CondJump {
-                loc,
                 cond,
                 then_label,
                 else_label,
+                ..
             } => {
                 write!(f, "CondJump({cond}, {then_label}, {else_label})")
             }
-            Instruction::Label { loc, name } => {
+            Instruction::Label { name, .. } => {
                 write!(f, "Label({name})")
             }
         }
@@ -176,10 +173,9 @@ fn visit(
     free: &mut usize,
     ast: &Ast,
 ) -> IRVar {
-    #[expect(unused_variables)]
     match ast {
-        Ast::NoneLiteral { typ, loc } => IRVar(String::from("unit")),
-        Ast::BoolLiteral { val, typ, loc } => {
+        Ast::NoneLiteral { .. } => IRVar(String::from("unit")),
+        Ast::BoolLiteral { val, loc, .. } => {
             let var = new_var(var_types, free, Type::Bool);
             ins.push(Instruction::LoadBoolConst {
                 loc: *loc,
@@ -188,7 +184,7 @@ fn visit(
             });
             var
         }
-        Ast::IntLiteral { val, typ, loc } => {
+        Ast::IntLiteral { val, loc, .. } => {
             let var = new_var(var_types, free, Type::Int);
             ins.push(Instruction::LoadIntConst {
                 loc: *loc,
@@ -197,7 +193,7 @@ fn visit(
             });
             var
         }
-        Ast::Identifier { name, typ, loc } => {
+        Ast::Identifier { name, .. } => {
             for map in sym_table.iter().rev() {
                 if map.contains_key(name) {
                     return map[name].clone();
@@ -354,7 +350,7 @@ fn visit(
                 },
             )
         }
-        Ast::Block { stats, typ, loc } => {
+        Ast::Block { stats, .. } => {
             let len = &stats.len();
             sym_table.push(HashMap::new());
             for (i, stat) in stats.iter().enumerate() {
@@ -476,10 +472,7 @@ fn visit(
         }
 
         Ast::While {
-            cond,
-            then,
-            typ,
-            loc,
+            cond, then, loc, ..
         } => {
             let cond_label = new_label(loc, free);
             let do_label = new_label(loc, free);

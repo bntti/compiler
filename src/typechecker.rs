@@ -61,26 +61,25 @@ pub fn run_typecheck(ast: &mut Ast) {
 }
 
 fn typecheck(node: &mut Ast, variables: &mut Vec<HashMap<String, Type>>) -> Type {
-    #[expect(unused_variables)]
     match node {
-        Ast::NoneLiteral { typ, loc } => {
+        Ast::NoneLiteral { typ, .. } => {
             *typ = Type::Unit;
             Type::Unit
         }
-        Ast::IntLiteral { val, typ, loc } => {
+        Ast::IntLiteral { typ, .. } => {
             *typ = Type::Int;
             Type::Int
         }
-        Ast::BoolLiteral { val, typ, loc } => {
+        Ast::BoolLiteral { typ, .. } => {
             *typ = Type::Bool;
             Type::Bool
         }
-        Ast::Minus { stat, typ, loc } => {
+        Ast::Minus { stat, typ, .. } => {
             typecheck_int(stat, variables);
             *typ = Type::Int;
             Type::Int
         }
-        Ast::Negate { stat, typ, loc } => {
+        Ast::Negate { stat, typ, .. } => {
             typecheck_bool(stat, variables);
             *typ = Type::Bool;
             Type::Bool
@@ -174,8 +173,8 @@ fn typecheck(node: &mut Ast, variables: &mut Vec<HashMap<String, Type>>) -> Type
             cond,
             then,
             els,
-            typ,
             loc,
+            ..
         } => {
             typecheck_bool(cond, variables);
 
@@ -194,10 +193,7 @@ fn typecheck(node: &mut Ast, variables: &mut Vec<HashMap<String, Type>>) -> Type
         }
 
         Ast::While {
-            cond,
-            then,
-            typ,
-            loc,
+            cond, then, typ, ..
         } => {
             typecheck_bool(cond, variables);
             typecheck(then, variables);
@@ -205,7 +201,7 @@ fn typecheck(node: &mut Ast, variables: &mut Vec<HashMap<String, Type>>) -> Type
             Type::Unit
         }
 
-        Ast::Block { stats, typ, loc } => {
+        Ast::Block { stats, typ, .. } => {
             let len = &stats.len();
             variables.push(HashMap::new());
             for (i, stat) in stats.iter_mut().enumerate() {
@@ -228,10 +224,10 @@ fn typecheck(node: &mut Ast, variables: &mut Vec<HashMap<String, Type>>) -> Type
             loc,
         } => match op.as_str() {
             "=" => {
-                let name = match &**left {
-                    Ast::Identifier { name, typ, loc } => name,
-                    _ => panic!("{loc:?}: Expected left side of = to be an identifier"),
-                };
+                if !matches!(&**left, Ast::Identifier { .. }) {
+                    panic!("{loc:?}: Expected left side of = to be an identifier");
+                }
+
                 let left_type = typecheck(left, variables);
                 let value_type = typecheck_val(right, variables);
 

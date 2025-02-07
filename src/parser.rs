@@ -173,9 +173,8 @@ fn parse_block(tokens: &Vec<Token>, pos: &mut usize, parent: Ast) -> Ast {
     let mut statements = vec![];
     match parent {
         Ast::Root {
-            stats: _,
-            typ: _,
             loc: block_location,
+            ..
         } => {
             while peek(tokens, *pos).token_type != TokenType::End {
                 statements.push(parse_line(tokens, pos));
@@ -220,9 +219,8 @@ fn parse_block(tokens: &Vec<Token>, pos: &mut usize, parent: Ast) -> Ast {
             }
         }
         Ast::Block {
-            stats: _,
-            typ: _,
             loc: block_location,
+            ..
         } => {
             while peek(tokens, *pos).token_type != TokenType::End {
                 statements.push(parse_line(tokens, pos));
@@ -345,14 +343,7 @@ fn parse_expression(tokens: &Vec<Token>, pos: &mut usize, level: usize) -> Ast {
 
     // Special case for equality
     if token.value == *"=" && level == 0 {
-        if !matches!(
-            left,
-            Ast::Identifier {
-                name: _,
-                typ: _,
-                loc: _
-            }
-        ) {
+        if !matches!(left, Ast::Identifier { .. }) {
             panic!("{location:?}: Expected variable")
         }
 
@@ -476,14 +467,7 @@ fn parse_term(tokens: &Vec<Token>, pos: &mut usize) -> Ast {
             };
 
             // If boolean return;
-            if matches!(
-                identifier,
-                Ast::BoolLiteral {
-                    val: _,
-                    typ: _,
-                    loc: _
-                }
-            ) {
+            if matches!(identifier, Ast::BoolLiteral { .. }) {
                 return identifier;
             }
 
