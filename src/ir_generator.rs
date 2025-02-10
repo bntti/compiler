@@ -7,7 +7,7 @@ use crate::{
 };
 
 #[derive(Clone, Hash, PartialEq, Eq, Debug)]
-pub struct IRVar(String);
+pub struct IRVar(pub String);
 
 #[derive(Debug, Clone)]
 #[expect(dead_code)] // Some loc fields

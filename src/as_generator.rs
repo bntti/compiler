@@ -1,13 +1,14 @@
 use std::collections::HashMap;
 
 use crate::{
+    as_intrinsics::parse_intrinsics,
     ir_generator::{IRVar, Instruction},
     svec,
     util::label_name,
 };
 
-struct Locals {
-    var_to_location: HashMap<IRVar, String>,
+pub struct Locals {
+    pub var_to_location: HashMap<IRVar, String>,
     stack_used: i32,
 }
 
@@ -25,6 +26,7 @@ fn init_locals(instructions: &[Instruction]) -> Locals {
         stack_used: 0,
     };
 
+    add_var(&mut locals, IRVar(String::from("unit")));
     for ins in instructions {
         match ins {
             Instruction::Call { dest, .. } => add_var(&mut locals, dest.clone()),
@@ -41,7 +43,7 @@ fn init_locals(instructions: &[Instruction]) -> Locals {
     locals
 }
 
-fn emit(lines: &mut Vec<String>, line: String) {
+pub fn emit(lines: &mut Vec<String>, line: String) {
     lines.push(line);
 }
 
@@ -68,20 +70,20 @@ pub fn run_as_gen(instructions: &[Instruction]) -> String {
                 //  ".L" prefix marks the symbol as "private".
                 //  This makes GDB backtraces look nicer too:
                 //  https://stackoverflow.com/a/26065570/965979
-                emit(&mut lines, format!("L.{name}"));
+                emit(&mut lines, format!(".L{name}:"));
             }
 
             Instruction::LoadIntConst { value, dest, .. } => {
                 let dest_ref = &locals.var_to_location[dest];
                 if -2_i64.pow(31) <= *value && *value < 2_i64.pow(31) {
-                    emit(&mut lines, format!("movq {value} {dest_ref}"));
+                    emit(&mut lines, format!("movq ${value}, {dest_ref}"));
                 } else {
                     //Due to a quirk of x86-64, we must use
                     //a different instruction for large integers.
                     //It can only write to a register,
                     //not a memory location, so we use %rax
                     //as a temporary.
-                    emit(&mut lines, format!("movabsq {value}, %rax"));
+                    emit(&mut lines, format!("movabsq ${value}, %rax"));
                     emit(&mut lines, format!("movq %rax, %rax {dest_ref}"));
                 }
             }
@@ -91,21 +93,54 @@ pub fn run_as_gen(instructions: &[Instruction]) -> String {
                 emit(&mut lines, format!("jmp .L{name}"));
             }
 
-            // Unimplemented
-            Instruction::Call {
-                loc,
-                fun,
-                args,
-                dest,
-            } => todo!(),
+            Instruction::LoadBoolConst { value, dest, .. } => {
+                let dest_ref = &locals.var_to_location[dest];
+                let bin_value = if *value { 1 } else { 0 };
+                emit(&mut lines, format!("movq ${bin_value}, {dest_ref}"));
+            }
+
+            Instruction::Copy { source, dest, .. } => {
+                let source_ref = &locals.var_to_location[source];
+                let dest_ref = &locals.var_to_location[dest];
+
+                emit(&mut lines, format!("movq {source_ref}, %rax"));
+                emit(&mut lines, format!("movq %rax, {dest_ref}"));
+            }
+
             Instruction::CondJump {
-                loc,
                 cond,
                 then_label,
                 else_label,
-            } => todo!(),
-            Instruction::Copy { loc, source, dest } => todo!(),
-            Instruction::LoadBoolConst { loc, value, dest } => todo!(),
+                ..
+            } => {
+                let cond_ref = &locals.var_to_location[cond];
+                let then_label = label_name(then_label);
+                let else_label = label_name(else_label);
+
+                emit(&mut lines, format!("cmpq $0, {cond_ref}"));
+                emit(&mut lines, format!("jne .L{else_label}"));
+                emit(&mut lines, format!("jmp .L{then_label}"));
+            }
+
+            Instruction::Call {
+                fun,
+                args,
+                dest: _, // TODO:
+                ..
+            } => {
+                if !parse_intrinsics(&locals, &mut lines, ins) {
+                    let regs = ["%rdi", "%rsi", "%rdx", "%rcx", "%r8", "%r9"];
+                    for (i, arg) in args.iter().enumerate() {
+                        let source_ref = &locals.var_to_location[arg];
+                        let reg = regs[i];
+                        emit(&mut lines, format!("movq {source_ref}, {reg}"));
+                    }
+
+                    // TODO:
+                    // let fun_ref = &locals.var_to_location[fun];
+                    emit(&mut lines, format!("callq {fun:?}"));
+                }
+            }
         }
     }
     lines.join("\n")

@@ -13,7 +13,7 @@ pub fn compile(source_code: String) -> String {
     println!(); // Extra newline to make reading output easier
 
     // Tokenize
-    println!("\x1b[1mTokenizer output\x1b[0;100m");
+    println!("\x1b[1mTokenizer output\x1b[0;48;2;30;30;30m");
     for token in &tokens {
         let text = &token.value;
         print!("{text} ");
@@ -37,7 +37,7 @@ pub fn compile(source_code: String) -> String {
     // IR generator
     let ir = run_ir_gen(ast);
 
-    println!("\x1b[1mIR generator output\x1b[0;100m");
+    println!("\x1b[1mIR generator output\x1b[0;48;2;30;30;30m");
     for ins in ir.iter() {
         println!("{ins}");
     }
@@ -46,7 +46,7 @@ pub fn compile(source_code: String) -> String {
     // Assembly generator
     let assembly = run_as_gen(&ir);
 
-    println!("\x1b[1mAssembly generator output\x1b[0;100m");
+    println!("\x1b[1mAssembly generator output\x1b[0;48;2;30;30;30m");
     println!("{assembly}");
     println!("\x1b[0m");
 

@@ -1,4 +1,5 @@
 mod as_generator;
+mod as_intrinsics;
 mod compiler;
 mod interpreter;
 mod ir_generator;
