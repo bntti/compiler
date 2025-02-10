@@ -1,13 +1,13 @@
 use std::process::exit;
 
 use crate::{
-    as_generator::run_as_gen, interpreter::run_interpret, ir_generator::run_ir_gen, parser,
-    tokenizer, typechecker::run_typecheck,
+    as_generator::run_as_gen, assembler::assemble, interpreter::run_interpret,
+    ir_generator::run_ir_gen, parser, tokenizer, typechecker::run_typecheck,
 };
 
 const INTERPRET: bool = false;
 
-pub fn compile(source_code: String) -> String {
+pub fn compile(source_code: String) -> Vec<u8> {
     let tokens = tokenizer::tokenize(source_code);
 
     println!(); // Extra newline to make reading output easier
@@ -51,5 +51,5 @@ pub fn compile(source_code: String) -> String {
     println!("\x1b[0m");
 
     println!(); // Extra newline to make reading output easier
-    todo!("Implement the rest of the compile process")
+    assemble(assembly)
 }

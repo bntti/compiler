@@ -1,5 +1,6 @@
 mod as_generator;
 mod as_intrinsics;
+mod assembler;
 mod compiler;
 mod interpreter;
 mod ir_generator;
@@ -86,9 +87,7 @@ fn main() {
     match args.command {
         Command::Compile => {
             let source_code = read_source(args.input_file);
-            let assembly = compiler::compile(source_code);
-            println!("{assembly}");
-            todo!("Write assembly to output file")
+            compiler::compile(source_code);
         }
         Command::Serve => run_server(args.host, args.port),
     }

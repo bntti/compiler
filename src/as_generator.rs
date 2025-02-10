@@ -16,7 +16,7 @@ fn add_var(locals: &mut Locals, var: IRVar) {
     if let std::collections::hash_map::Entry::Vacant(e) = locals.var_to_location.entry(var) {
         locals.stack_used += 8;
         let stack_used = locals.stack_used;
-        e.insert(format!("-${stack_used}(%rbp)"));
+        e.insert(format!("-{stack_used}(%rbp)"));
     }
 }
 
@@ -49,6 +49,7 @@ pub fn emit(lines: &mut Vec<String>, line: String) {
 
 pub fn run_as_gen(instructions: &[Instruction]) -> String {
     let locals = init_locals(instructions);
+    let space = locals.stack_used;
 
     // lines = []
     let mut lines = svec![
@@ -60,7 +61,10 @@ pub fn run_as_gen(instructions: &[Instruction]) -> String {
         "",
         "    .section .text",
         "",
-        "main:"
+        "main:",
+        "    pushq %rbp",
+        "    movq %rsp, %rbp",
+        format!("    subq ${space}, %rsp")
     ];
 
     for ins in instructions {
@@ -118,8 +122,8 @@ pub fn run_as_gen(instructions: &[Instruction]) -> String {
                 let else_label = label_name(else_label);
 
                 emit(&mut lines, format!("cmpq $0, {cond_ref}"));
-                emit(&mut lines, format!("jne .L{else_label}"));
-                emit(&mut lines, format!("jmp .L{then_label}"));
+                emit(&mut lines, format!("jne .L{then_label}"));
+                emit(&mut lines, format!("jmp .L{else_label}"));
             }
 
             Instruction::Call {
@@ -136,9 +140,10 @@ pub fn run_as_gen(instructions: &[Instruction]) -> String {
                         emit(&mut lines, format!("movq {source_ref}, {reg}"));
                     }
 
-                    // TODO:
+                    // TODO: ?
                     // let fun_ref = &locals.var_to_location[fun];
-                    emit(&mut lines, format!("callq {fun:?}"));
+                    let name = &fun.0;
+                    emit(&mut lines, format!("callq {name}"));
                 }
             }
         }

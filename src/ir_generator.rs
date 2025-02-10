@@ -150,6 +150,10 @@ fn generate_ir(root_types: HashMap<IRVar, Type>, root_ast: Ast) -> Vec<Instructi
 }
 
 fn new_var(var_types: &mut HashMap<IRVar, Type>, free: &mut usize, t: Type) -> IRVar {
+    if matches!(t, Type::Unit) {
+        return IRVar(String::from("unit"));
+    }
+
     let var = IRVar(String::from("x") + &free.to_string());
     *free += 1;
     var_types.insert(var.clone(), t);
@@ -368,14 +372,14 @@ fn visit(
             typ,
             loc,
         } => {
-            let value = visit(ins, var_types, sym_table, free, stat);
             let new_var = IRVar(name.clone());
             var_types.insert(IRVar(name.clone()), typ.clone());
             sym_table
                 .last_mut()
                 .unwrap()
-                .insert(name.clone(), value.clone());
+                .insert(name.clone(), new_var.clone());
 
+            let value = visit(ins, var_types, sym_table, free, stat);
             ins.push(Instruction::Copy {
                 loc: *loc,
                 source: value,

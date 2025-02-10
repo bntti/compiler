@@ -85,18 +85,20 @@ fn typecheck(node: &mut Ast, variables: &mut Vec<HashMap<String, Type>>) -> Type
             Type::Bool
         }
 
-        // Code would be identical to that of the block
-        Ast::Root { stats, typ, loc } => {
-            let block_type = typecheck(
-                &mut Ast::Block {
-                    stats: stats.clone(), // Inoptimal, too lazy to make duplicate code
-                    typ: typ.clone(),
-                    loc: *loc,
-                },
-                variables,
-            );
-            *typ = block_type.clone();
-            block_type
+        // Identical to block code
+        Ast::Root { stats, typ, .. } => {
+            let len = &stats.len();
+            variables.push(HashMap::new());
+            for (i, stat) in stats.iter_mut().enumerate() {
+                if i == len - 1 {
+                    let block_type = typecheck(&mut *stat, variables);
+                    *typ = block_type.clone();
+                    return block_type;
+                }
+                typecheck(&mut *stat, variables);
+            }
+            *typ = Type::Unit;
+            Type::Unit // Empty block
         }
 
         Ast::Function {
