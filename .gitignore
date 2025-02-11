@@ -2,3 +2,5 @@
 test-code
 /target
 /compiler-target
+/tests
+a.out
