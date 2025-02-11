@@ -104,6 +104,7 @@ pub fn run_ir_gen(root_ast: Ast) -> Vec<Instruction> {
         (IRVar(String::from(">")), Type::Unit),
         (IRVar(String::from(">=")), Type::Unit),
         (IRVar(String::from("==")), Type::Unit),
+        (IRVar(String::from("!=")), Type::Unit),
         (IRVar(String::from("+")), Type::Unit),
         (IRVar(String::from("-")), Type::Unit),
         (IRVar(String::from("*")), Type::Unit),

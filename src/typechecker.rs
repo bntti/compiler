@@ -160,7 +160,7 @@ fn typecheck(node: &mut Ast, variables: &mut Vec<HashMap<String, Type>>) -> Type
             then,
             els,
             loc,
-            ..
+            typ,
         } => {
             typecheck_bool(cond, variables);
 
@@ -172,9 +172,13 @@ fn typecheck(node: &mut Ast, variables: &mut Vec<HashMap<String, Type>>) -> Type
                     if then_type != else_type {
                         panic!("{loc:?}: Mismatching types for then and else branches");
                     }
+                    *typ = then_type.clone();
                     then_type
                 }
-                None => Type::Unit,
+                None => {
+                    *typ = Type::Unit;
+                    Type::Unit
+                }
             }
         }
 
