@@ -8,15 +8,15 @@ use crate::{
 pub fn run_typecheck(ast: &mut Ast) {
     let bool_bin_fn = Type::Function {
         params: vec![Type::Bool, Type::Bool],
-        ret: Box::new(Type::Int),
-    };
-    let int_bin_fn = Type::Function {
-        params: vec![Type::Int, Type::Int],
-        ret: Box::new(Type::Int),
+        ret: Box::new(Type::Bool),
     };
     let int_bool_bin_fn = Type::Function {
         params: vec![Type::Int, Type::Int],
         ret: Box::new(Type::Bool),
+    };
+    let int_bin_fn = Type::Function {
+        params: vec![Type::Int, Type::Int],
+        ret: Box::new(Type::Int),
     };
 
     let globals: HashMap<String, Type> = HashMap::from([
@@ -85,22 +85,6 @@ fn typecheck(node: &mut Ast, variables: &mut Vec<HashMap<String, Type>>) -> Type
             Type::Bool
         }
 
-        // Identical to block code
-        Ast::Root { stats, typ, .. } => {
-            let len = &stats.len();
-            variables.push(HashMap::new());
-            for (i, stat) in stats.iter_mut().enumerate() {
-                if i == len - 1 {
-                    let block_type = typecheck(&mut *stat, variables);
-                    *typ = block_type.clone();
-                    return block_type;
-                }
-                typecheck(&mut *stat, variables);
-            }
-            *typ = Type::Unit;
-            Type::Unit // Empty block
-        }
-
         Ast::Function {
             name,
             params,
@@ -153,10 +137,10 @@ fn typecheck(node: &mut Ast, variables: &mut Vec<HashMap<String, Type>>) -> Type
             variables
                 .last_mut()
                 .unwrap()
-                .insert(name.clone(), value_type);
+                .insert(name.clone(), value_type.clone());
 
-            *typ = Type::Unit;
-            Type::Unit
+            *typ = value_type.clone();
+            value_type
         }
 
         // TODO: Check that identifier is not a function?
@@ -203,19 +187,24 @@ fn typecheck(node: &mut Ast, variables: &mut Vec<HashMap<String, Type>>) -> Type
             Type::Unit
         }
 
-        Ast::Block { stats, typ, .. } => {
-            let len = &stats.len();
+        // Identical to block code
+        Ast::Root { stats, typ, .. } => {
             variables.push(HashMap::new());
-            for (i, stat) in stats.iter_mut().enumerate() {
-                if i == len - 1 {
-                    let block_type = typecheck(&mut *stat, variables);
-                    *typ = block_type.clone();
-                    return block_type;
-                }
-                typecheck(&mut *stat, variables);
+            let mut block_type = Type::Unit;
+            for stat in stats {
+                block_type = typecheck(&mut *stat, variables);
             }
-            *typ = Type::Unit;
-            Type::Unit // Empty block
+            *typ = block_type.clone();
+            block_type
+        }
+        Ast::Block { stats, typ, .. } => {
+            variables.push(HashMap::new());
+            let mut block_type = Type::Unit;
+            for stat in stats {
+                block_type = typecheck(&mut *stat, variables);
+            }
+            *typ = block_type.clone();
+            block_type
         }
 
         Ast::BinaryOp {

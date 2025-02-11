@@ -279,6 +279,7 @@ fn parse_line(tokens: &Vec<Token>, pos: &mut usize) -> Ast {
                 typ = match typ_str.as_str() {
                     "Int" => Type::Int,
                     "Bool" => Type::Bool,
+                    "Unit" => Type::Unit,
                     _ => panic!("{location:?}: Unknown type {typ_str}"),
                 }
             }

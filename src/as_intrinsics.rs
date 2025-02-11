@@ -16,7 +16,19 @@ pub fn parse_intrinsics(locals: &Locals, lines: &mut Vec<String>, ins: &Instruct
     };
 
     let operators = HashSet::from([
-        "minus", "not", "+", "-", "*", "/", "%", "==", "!=", "<", "<=", ">", ">=",
+        "unary_minus",
+        "unary_not",
+        "+",
+        "-",
+        "*",
+        "/",
+        "%",
+        "==",
+        "!=",
+        "<",
+        "<=",
+        ">",
+        ">=",
     ]);
     if !operators.contains(fun.0.as_str()) {
         return false;
@@ -34,14 +46,12 @@ pub fn parse_intrinsics(locals: &Locals, lines: &mut Vec<String>, ins: &Instruct
     let source_ref1 = &locals.var_to_location[&args[0]];
     let result_reg = "%rax";
     match fun.0.as_str() {
-        // unary_minus
-        "minus" => {
+        "unary_minus" => {
             emit(lines, format!("movq {source_ref1}, {result_reg}"));
             emit(lines, format!("negq {result_reg}"));
         }
 
-        // Unary_not
-        "not" => {
+        "unary_not" => {
             emit(lines, format!("movq {source_ref1}, {result_reg}"));
             emit(lines, format!("xorq $1, {result_reg}"));
         }

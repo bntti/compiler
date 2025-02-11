@@ -6,23 +6,26 @@ use crate::{
 };
 
 const INTERPRET: bool = false;
+const DEBUG: bool = false;
 
 pub fn compile(source_code: String) -> Vec<u8> {
-    let tokens = tokenizer::tokenize(source_code);
-
-    println!(); // Extra newline to make reading output easier
+    if DEBUG {
+        println!(); // Extra newline to make reading output easier
+    }
 
     // Tokenize
-    println!("\x1b[1mTokenizer output\x1b[0;48;2;30;30;30m");
-    for token in &tokens {
-        let text = &token.value;
-        print!("{text} ");
+    let tokens = tokenizer::tokenize(source_code);
+    if DEBUG {
+        println!("\x1b[1mTokenizer output\x1b[0;48;2;30;30;30m");
+        for token in &tokens {
+            let text = &token.value;
+            print!("{text} ");
+        }
+        println!("\x1b[0m\n");
     }
-    println!("\x1b[0m\n");
 
     // Generate AST
     let mut ast = parser::parse(tokens);
-    // println!("{ast:#?}");
 
     // Interpret
     if INTERPRET {
@@ -36,20 +39,23 @@ pub fn compile(source_code: String) -> Vec<u8> {
 
     // IR generator
     let ir = run_ir_gen(ast);
-
-    println!("\x1b[1mIR generator output\x1b[0;48;2;30;30;30m");
-    for ins in ir.iter() {
-        println!("{ins}");
+    if DEBUG {
+        println!("\x1b[1mIR generator output\x1b[0;48;2;30;30;30m");
+        for ins in ir.iter() {
+            println!("{ins}");
+        }
+        println!("\x1b[0m\n");
     }
-    println!("\x1b[0m\n");
 
     // Assembly generator
     let assembly = run_as_gen(&ir);
+    if DEBUG {
+        println!("\x1b[1mAssembly generator output\x1b[0;48;2;30;30;30m");
+        println!("{assembly}");
+        println!("\x1b[0m");
 
-    println!("\x1b[1mAssembly generator output\x1b[0;48;2;30;30;30m");
-    println!("{assembly}");
-    println!("\x1b[0m");
+        println!(); // Extra newline to make reading output easier
+    }
 
-    println!(); // Extra newline to make reading output easier
     assemble(assembly)
 }

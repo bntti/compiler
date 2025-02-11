@@ -109,6 +109,8 @@ pub fn run_ir_gen(root_ast: Ast) -> Vec<Instruction> {
         (IRVar(String::from("*")), Type::Unit),
         (IRVar(String::from("/")), Type::Unit),
         (IRVar(String::from("%")), Type::Unit),
+        (IRVar(String::from("unary_minus")), Type::Unit),
+        (IRVar(String::from("unary_not")), Type::Unit),
         (IRVar(String::from("read_int")), Type::Unit),
         (IRVar(String::from("print_int")), Type::Unit),
         (IRVar(String::from("print_bool")), Type::Unit),
@@ -334,7 +336,7 @@ fn visit(
             }
         }
         Ast::Minus { stat, typ, loc } => {
-            let var_op = sym_table[0][&String::from("minus")].clone();
+            let var_op = sym_table[0][&String::from("unary_minus")].clone();
             let var_value = visit(ins, var_types, sym_table, free, stat);
             let var_result = new_var(var_types, free, typ.clone());
             ins.push(Instruction::Call {
@@ -346,7 +348,7 @@ fn visit(
             var_result
         }
         Ast::Negate { stat, typ, loc } => {
-            let var_op = sym_table[0][&String::from("neg")].clone();
+            let var_op = sym_table[0][&String::from("unary_not")].clone();
             let var_value = visit(ins, var_types, sym_table, free, stat);
             let var_result = new_var(var_types, free, typ.clone());
             ins.push(Instruction::Call {
@@ -358,29 +360,21 @@ fn visit(
             var_result
         }
 
-        Ast::Root { stats, typ, loc } => {
-            visit(
-                ins,
-                var_types,
-                sym_table,
-                free,
-                &Ast::Block {
-                    stats: stats.clone(), // Inoptimal, too lazy to make duplicate code
-                    typ: typ.clone(),
-                    loc: *loc,
-                },
-            )
+        Ast::Root { stats, .. } => {
+            sym_table.push(HashMap::new());
+            let mut block_var = IRVar(String::from("unit"));
+            for stat in stats {
+                block_var = visit(ins, var_types, sym_table, free, stat);
+            }
+            block_var
         }
         Ast::Block { stats, .. } => {
-            let len = &stats.len();
             sym_table.push(HashMap::new());
-            for (i, stat) in stats.iter().enumerate() {
-                if i == len - 1 {
-                    return visit(ins, var_types, sym_table, free, stat);
-                }
-                visit(ins, var_types, sym_table, free, stat);
+            let mut block_var = IRVar(String::from("unit"));
+            for stat in stats {
+                block_var = visit(ins, var_types, sym_table, free, stat);
             }
-            IRVar(String::from("unit")) // Empty block
+            block_var
         }
 
         Ast::Var {

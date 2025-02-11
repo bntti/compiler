@@ -88,7 +88,7 @@ pub fn run_as_gen(instructions: &[Instruction]) -> String {
                     //not a memory location, so we use %rax
                     //as a temporary.
                     emit(&mut lines, format!("movabsq ${value}, %rax"));
-                    emit(&mut lines, format!("movq %rax, %rax {dest_ref}"));
+                    emit(&mut lines, format!("movq %rax, {dest_ref}"));
                 }
             }
 

@@ -70,9 +70,14 @@ fn run_server(host: String, port: u32) {
         let mut result = json!({});
         if request["command"] == "compile" {
             let source_code = &request["code"].as_str().unwrap();
-            let assembly = compiler::compile(source_code.to_string());
-            let base64 = BASE64_STANDARD.encode(assembly);
-            result["program"] = Value::String(base64);
+            let output = std::panic::catch_unwind(|| compiler::compile(source_code.to_string()));
+
+            if let Ok(binary) = output {
+                let base64 = BASE64_STANDARD.encode(binary);
+                result["program"] = Value::String(base64);
+            } else {
+                result["error"] = Value::String(String::from("Compile failed"));
+            }
         } else if request["command"] != "ping" {
             panic!()
         }
