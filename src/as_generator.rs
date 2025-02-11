@@ -127,10 +127,7 @@ pub fn run_as_gen(instructions: &[Instruction]) -> String {
             }
 
             Instruction::Call {
-                fun,
-                args,
-                dest: _, // TODO:
-                ..
+                fun, args, dest, ..
             } => {
                 if !parse_intrinsics(&locals, &mut lines, ins) {
                     let regs = ["%rdi", "%rsi", "%rdx", "%rcx", "%r8", "%r9"];
@@ -140,13 +137,21 @@ pub fn run_as_gen(instructions: &[Instruction]) -> String {
                         emit(&mut lines, format!("movq {source_ref}, {reg}"));
                     }
 
-                    // TODO: ?
-                    // let fun_ref = &locals.var_to_location[fun];
+                    let dest_ref = &locals.var_to_location[dest];
                     let name = &fun.0;
                     emit(&mut lines, format!("callq {name}"));
+                    emit(&mut lines, format!("movq %rax, {dest_ref}"));
                 }
             }
         }
     }
+
+    lines.extend(svec![
+        "movq $0, %rax",
+        "movq %rbp, %rsp",
+        "popq %rbp",
+        "ret",
+    ]);
+
     lines.join("\n")
 }

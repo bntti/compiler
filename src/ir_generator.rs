@@ -119,7 +119,7 @@ pub fn run_ir_gen(root_ast: Ast) -> Vec<Instruction> {
 fn generate_ir(root_types: HashMap<IRVar, Type>, root_ast: Ast) -> Vec<Instruction> {
     let mut var_types = root_types.clone();
     let var_unit = IRVar(String::from("unit"));
-    var_types.insert(var_unit, Type::Unit);
+    var_types.insert(var_unit.clone(), Type::Unit);
 
     let mut free = 0;
     let mut ins = vec![];
@@ -140,9 +140,26 @@ fn generate_ir(root_types: HashMap<IRVar, Type>, root_ast: Ast) -> Vec<Instructi
         &root_ast,
     );
 
+    // Print return value of root block if not unit
     match var_types[&var_final_result] {
-        Type::Bool => todo!("Emit call to print_bool"),
-        Type::Int => todo!("Emit call to print_int"),
+        Type::Bool => {
+            let fun = root_symbol_table[0][&String::from("print_bool")].clone();
+            ins.push(Instruction::Call {
+                loc: loc!(usize::MAX, usize::MAX),
+                fun,
+                args: vec![var_final_result],
+                dest: var_unit,
+            });
+        }
+        Type::Int => {
+            let fun = root_symbol_table[0][&String::from("print_int")].clone();
+            ins.push(Instruction::Call {
+                loc: loc!(usize::MAX, usize::MAX),
+                fun,
+                args: vec![var_final_result],
+                dest: var_unit,
+            });
+        }
         _ => (),
     }
 

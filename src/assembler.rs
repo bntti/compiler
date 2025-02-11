@@ -1,5 +1,5 @@
 use std::{
-    fs::File,
+    fs::{self, File},
     io::{Read, Write},
     process::Command,
 };
@@ -12,6 +12,9 @@ pub fn assemble(assembly_code: String) -> Vec<u8> {
     let program_asm = format!("{workdir}/program.s");
     let program_obj = format!("{workdir}/program.o");
     let output_file = format!("{workdir}/a.out");
+
+    // Create folder (ignore status)
+    let _ = fs::create_dir(workdir);
 
     // Write asm files
     File::create(&stdlib_asm)

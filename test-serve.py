@@ -3,7 +3,7 @@ import socket
 if __name__ == "__main__":
     address = "127.0.0.1"
     port = 3000
-    data = '{"command": "compile", "code": "# comment"}'
+    data = '{"command": "compile", "code": "var x = 1;\\nx+4"}'
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:

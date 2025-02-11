@@ -293,27 +293,6 @@ fn parse_line(tokens: &Vec<Token>, pos: &mut usize) -> Ast {
                 loc: var_token.location,
             }
         }
-        "while" => {
-            let while_token = consume(tokens, pos, Expected::String(String::from("while")));
-            let cond = parse_expression(tokens, pos, 0);
-            consume(tokens, pos, Expected::String(String::from("do")));
-            let brace_token = consume(tokens, pos, Expected::String(String::from("{")));
-            let then = parse_block(
-                tokens,
-                pos,
-                Ast::Block {
-                    stats: vec![],
-                    typ: Type::Unk,
-                    loc: brace_token.location,
-                },
-            );
-            Ast::While {
-                cond: Box::new(cond),
-                then: Box::new(then),
-                typ: Type::Unk,
-                loc: while_token.location,
-            }
-        }
         _ => parse_expression(tokens, pos, 0),
     }
 }
@@ -402,6 +381,27 @@ fn parse_term(tokens: &Vec<Token>, pos: &mut usize) -> Ast {
                 els: Box::new(els),
                 typ: Type::Unk,
                 loc: if_token.location,
+            };
+        }
+        "while" => {
+            let while_token = consume(tokens, pos, Expected::String(String::from("while")));
+            let cond = parse_expression(tokens, pos, 0);
+            consume(tokens, pos, Expected::String(String::from("do")));
+            let brace_token = consume(tokens, pos, Expected::String(String::from("{")));
+            let then = parse_block(
+                tokens,
+                pos,
+                Ast::Block {
+                    stats: vec![],
+                    typ: Type::Unk,
+                    loc: brace_token.location,
+                },
+            );
+            return Ast::While {
+                cond: Box::new(cond),
+                then: Box::new(then),
+                typ: Type::Unk,
+                loc: while_token.location,
             };
         }
         "-" => {
