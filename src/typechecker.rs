@@ -134,6 +134,10 @@ fn typecheck(node: &mut Ast, variables: &mut Vec<HashMap<String, Type>>) -> Type
                 panic!("{loc:?}: Wrong type, expected {typ:?}");
             }
 
+            if variables.last_mut().unwrap().contains_key(name) {
+                panic!("{loc:?}: Variable {name} already in scope");
+            }
+
             variables
                 .last_mut()
                 .unwrap()
@@ -198,6 +202,7 @@ fn typecheck(node: &mut Ast, variables: &mut Vec<HashMap<String, Type>>) -> Type
             for stat in stats {
                 block_type = typecheck(&mut *stat, variables);
             }
+            variables.pop();
             *typ = block_type.clone();
             block_type
         }
@@ -207,6 +212,7 @@ fn typecheck(node: &mut Ast, variables: &mut Vec<HashMap<String, Type>>) -> Type
             for stat in stats {
                 block_type = typecheck(&mut *stat, variables);
             }
+            variables.pop();
             *typ = block_type.clone();
             block_type
         }

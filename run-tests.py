@@ -46,7 +46,22 @@ def run_test(test_input: str, test_output: str):
             response += data
 
         data = response.decode("utf-8")
-        binary = base64.b64decode(json.loads(response.decode("utf-8"))["program"])
+        response_json = json.loads(response.decode("utf-8"))
+
+        # Compile failed / should have failed
+        if "error" in response_json:
+            if test_output.strip() == "error":
+                print("ok!")
+                return
+            else:
+                print("Compile failed")
+                return
+        if test_output.strip() == "error":
+            print("Compile didn't fail")
+            return
+
+        # Read and run binary
+        binary = base64.b64decode(response_json["program"])
         with open("a.out", "bw") as f:
             f.write(binary)
 
@@ -81,6 +96,8 @@ if __name__ == "__main__":
         else:
             tests[test_name][1] = "\n".join(data)
 
-    for test_name in tests:
-        print(f"Running test {test_name}", end=" ")
+    names = list(tests.keys())
+    names.sort()
+    for test_name in names:
+        print(f"Running test {test_name:{'.'}<20}", end="")
         run_test(tests[test_name][0], tests[test_name][1])

@@ -151,6 +151,7 @@ pub fn run_as_gen(instructions: &[Instruction]) -> String {
         "movq %rbp, %rsp",
         "popq %rbp",
         "ret",
+        "" // Add extra newline to stop assembler from complaining
     ]);
 
     lines.join("\n")

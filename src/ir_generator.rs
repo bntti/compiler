@@ -388,6 +388,7 @@ fn visit(
             for stat in stats {
                 block_var = visit(ins, var_types, sym_table, free, stat);
             }
+            sym_table.pop();
             block_var
         }
         Ast::Block { stats, .. } => {
@@ -396,6 +397,7 @@ fn visit(
             for stat in stats {
                 block_var = visit(ins, var_types, sym_table, free, stat);
             }
+            sym_table.pop();
             block_var
         }
 
@@ -405,8 +407,9 @@ fn visit(
             typ,
             loc,
         } => {
-            let new_var = IRVar(name.clone());
-            var_types.insert(IRVar(name.clone()), typ.clone());
+            // Would be nice to keep the name, but duplicate names would be a problem :(
+            let new_var = new_var(var_types, free, typ.clone());
+            var_types.insert(new_var.clone(), typ.clone());
             sym_table
                 .last_mut()
                 .unwrap()

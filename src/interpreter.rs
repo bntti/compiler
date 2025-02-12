@@ -104,15 +104,13 @@ fn interpret(node: &Ast, variables: &mut Vec<HashMap<String, Value>>) -> Value {
         }
 
         Ast::Block { stats, .. } => {
-            let len = &stats.len();
             variables.push(HashMap::new());
-            for (i, stat) in stats.iter().enumerate() {
-                if i == len - 1 {
-                    return interpret(stat, variables);
-                }
-                interpret(stat, variables);
+            let mut ret_value = Value::None;
+            for stat in stats {
+                ret_value = interpret(stat, variables);
             }
-            Value::None // Empty block
+            variables.pop();
+            ret_value
         }
 
         Ast::BinaryOp {
