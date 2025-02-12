@@ -212,7 +212,9 @@ fn visit(
             let var = new_var(var_types, free, Type::Int);
             ins.push(Instruction::LoadIntConst {
                 loc: *loc,
-                value: *val,
+                value: (*val)
+                    .try_into()
+                    .unwrap_or_else(|_| panic!("{loc:?}: Invalid integer")),
                 dest: var.clone(),
             });
             var
@@ -337,6 +339,25 @@ fn visit(
             }
         }
         Ast::Minus { stat, typ, loc } => {
+            // Special case for negative integers because -i64::MIN > i64::MAX
+            if let Ast::IntLiteral { val, loc, .. } = &**stat {
+                // If val == -i64::MIN
+                let signed_val = if *val == 9_223_372_036_854_775_808_u64 {
+                    i64::MIN
+                } else {
+                    -<u64 as std::convert::TryInto<i64>>::try_into(*val)
+                        .unwrap_or_else(|_| panic!("{loc:?}: Invalid integer"))
+                };
+
+                let var = new_var(var_types, free, Type::Int);
+                ins.push(Instruction::LoadIntConst {
+                    loc: *loc,
+                    value: signed_val,
+                    dest: var.clone(),
+                });
+                return var;
+            }
+
             let var_op = sym_table[0][&String::from("unary_minus")].clone();
             let var_value = visit(ins, var_types, sym_table, free, stat);
             let var_result = new_var(var_types, free, typ.clone());

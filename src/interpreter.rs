@@ -17,7 +17,8 @@ pub fn run_interpret(ast: &Ast) -> Value {
 fn interpret(node: &Ast, variables: &mut Vec<HashMap<String, Value>>) -> Value {
     match node {
         Ast::NoneLiteral { .. } => Value::None,
-        Ast::IntLiteral { val, .. } => Value::Int(*val),
+        // Fails with integers equal to i64::MIN
+        Ast::IntLiteral { val, .. } => Value::Int((*val).try_into().unwrap()),
         Ast::BoolLiteral { val, .. } => Value::Bool(*val),
         Ast::Minus { stat, .. } => Value::Int(-interpret_int(stat, variables)),
         Ast::Negate { stat, .. } => Value::Bool(!interpret_bool(stat, variables)),

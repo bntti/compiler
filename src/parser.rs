@@ -32,7 +32,7 @@ pub enum Ast {
         loc: Location,
     },
     IntLiteral {
-        val: i64,
+        val: u64,
         typ: Type,
         loc: Location,
     },
@@ -149,7 +149,7 @@ fn parse_int_literal(tokens: &[Token], pos: &mut usize) -> Ast {
     let value = token.value;
     Ast::IntLiteral {
         val: value
-            .parse::<i64>()
+            .parse::<u64>()
             .unwrap_or_else(|_| panic!("{location:?}: Invalid integer \"{value}\"")), // Should never happen?
         typ: Type::Unk,
         loc: token.location,

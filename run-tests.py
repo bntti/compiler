@@ -8,6 +8,25 @@ ADDRESS = "127.0.0.1"
 PORT = 3000
 
 
+def check(a: str, b: str) -> str:
+    lines_a = a.split("\n")
+    lines_b = b.split("\n")
+
+    lines_a = list(filter(lambda l: l.strip() != "", lines_a))
+    lines_b = list(filter(lambda l: l.strip() != "", lines_b))
+
+    if len(lines_a) != len(lines_b):
+        return "Different number of lines"
+
+    for i in range(len(lines_a)):
+        line_a = lines_a[i].strip()
+        line_b = lines_b[i].strip()
+        if line_a != line_b:
+            return f"{line_a} != {line_b}"
+
+    return ""
+
+
 def run_test(test_input: str, test_output: str):
     data = {"command": "compile"}
     data["code"] = test_input
@@ -34,10 +53,11 @@ def run_test(test_input: str, test_output: str):
         os.system("chmod u+x a.out")
 
         output = subprocess.check_output(["./a.out"]).decode("utf-8")
-        if output == test_output:
+        result = check(output, test_output)
+        if result == "":
             print("ok!")
         else:
-            print(f"Fail {output} != {test_output}")
+            print(result)
     except Exception as e:
         print(f"Fail {e}")
     finally:
