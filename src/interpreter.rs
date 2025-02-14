@@ -20,8 +20,8 @@ fn interpret(node: &Ast, variables: &mut Vec<HashMap<String, Value>>) -> Value {
         // Fails with integers equal to i64::MIN
         Ast::IntLiteral { val, .. } => Value::Int((*val).try_into().unwrap()),
         Ast::BoolLiteral { val, .. } => Value::Bool(*val),
-        Ast::Minus { stat, .. } => Value::Int(-interpret_int(stat, variables)),
-        Ast::Negate { stat, .. } => Value::Bool(!interpret_bool(stat, variables)),
+        Ast::UnaryMinus { stat, .. } => Value::Int(-interpret_int(stat, variables)),
+        Ast::UnaryNot { stat, .. } => Value::Bool(!interpret_bool(stat, variables)),
         Ast::Root { stats, typ, loc } => interpret(
             &Ast::Block {
                 stats: stats.clone(), // Inoptimal, too lazy to make duplicate code
@@ -31,7 +31,7 @@ fn interpret(node: &Ast, variables: &mut Vec<HashMap<String, Value>>) -> Value {
             variables,
         ), // Identical code
 
-        Ast::Function {
+        Ast::FnCall {
             name, params, loc, ..
         } => match name.as_str() {
             "print_int" => {

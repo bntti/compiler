@@ -406,7 +406,7 @@ fn visit(
                 }
             }
         }
-        Ast::Minus { stat, typ, loc } => {
+        Ast::UnaryMinus { stat, typ, loc } => {
             // Special case for negative integers because -i64::MIN > i64::MAX
             if let Ast::IntLiteral { val, loc, .. } = &**stat {
                 // If val == -i64::MIN
@@ -445,7 +445,7 @@ fn visit(
             });
             var_result
         }
-        Ast::Negate { stat, typ, loc } => {
+        Ast::UnaryNot { stat, typ, loc } => {
             let var_op = sym_table[0][&String::from("unary_not")].clone();
             let var_value = visit(
                 ins,
@@ -533,7 +533,7 @@ fn visit(
             IRVar(String::from("unit"))
         }
 
-        Ast::Function {
+        Ast::FnCall {
             name,
             params,
             typ,

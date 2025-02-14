@@ -74,12 +74,12 @@ fn typecheck(node: &mut Ast, variables: &mut Vec<HashMap<String, Type>>) -> Type
             *typ = Type::Bool;
             Type::Bool
         }
-        Ast::Minus { stat, typ, .. } => {
+        Ast::UnaryMinus { stat, typ, .. } => {
             typecheck_int(stat, variables);
             *typ = Type::Int;
             Type::Int
         }
-        Ast::Negate { stat, typ, .. } => {
+        Ast::UnaryNot { stat, typ, .. } => {
             typecheck_bool(stat, variables);
             *typ = Type::Bool;
             Type::Bool
@@ -93,7 +93,7 @@ fn typecheck(node: &mut Ast, variables: &mut Vec<HashMap<String, Type>>) -> Type
             Type::Unit
         }
 
-        Ast::Function {
+        Ast::FnCall {
             name,
             params,
             typ,

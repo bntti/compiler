@@ -25,7 +25,7 @@ pub enum Ast {
         typ: Type,
         loc: Location,
     },
-    Function {
+    FnCall {
         name: String,
         params: Vec<Ast>,
         typ: Type,
@@ -77,12 +77,12 @@ pub enum Ast {
         typ: Type,
         loc: Location,
     },
-    Minus {
+    UnaryMinus {
         stat: Box<Ast>,
         typ: Type,
         loc: Location,
     },
-    Negate {
+    UnaryNot {
         stat: Box<Ast>,
         typ: Type,
         loc: Location,
@@ -416,7 +416,7 @@ fn parse_term(tokens: &Vec<Token>, pos: &mut usize) -> Ast {
         "-" => {
             let token = consume(tokens, pos, Expected::String(String::from("-")));
             let expression = parse_term(tokens, pos);
-            return Ast::Minus {
+            return Ast::UnaryMinus {
                 stat: Box::new(expression),
                 typ: Type::Unk,
                 loc: token.location,
@@ -425,7 +425,7 @@ fn parse_term(tokens: &Vec<Token>, pos: &mut usize) -> Ast {
         "not" => {
             let token = consume(tokens, pos, Expected::String(String::from("not")));
             let expression = parse_term(tokens, pos);
-            return Ast::Negate {
+            return Ast::UnaryNot {
                 stat: Box::new(expression),
                 typ: Type::Unk,
                 loc: token.location,
@@ -507,7 +507,7 @@ fn parse_term(tokens: &Vec<Token>, pos: &mut usize) -> Ast {
                 }
                 if peek(tokens, *pos).value == ")" {
                     consume(tokens, pos, Expected::String(String::from(")")));
-                    return Ast::Function {
+                    return Ast::FnCall {
                         name: id_token.value,
                         params,
                         typ: Type::Unk,
@@ -551,10 +551,10 @@ mod tests {
     // Function
     macro_rules! fast {
         () => (
-            Ast::Function{params: Vec::new,typ: Type::Unk, loc: loc!()}
+            Ast::FnCall{params: Vec::new,typ: Type::Unk, loc: loc!()}
         );
         ($($x:expr),+ $(,)?) => (
-            Ast::Function{name: String::from("f"), params: vec![$($x),+], typ: Type::Unk,loc: loc!()}
+            Ast::FnCall{name: String::from("f"), params: vec![$($x),+], typ: Type::Unk,loc: loc!()}
         );
     }
     // BinaryOp
