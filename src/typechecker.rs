@@ -84,6 +84,14 @@ fn typecheck(node: &mut Ast, variables: &mut Vec<HashMap<String, Type>>) -> Type
             *typ = Type::Bool;
             Type::Bool
         }
+        Ast::Continue { typ, .. } => {
+            *typ = Type::Unit;
+            Type::Unit
+        }
+        Ast::Break { typ, .. } => {
+            *typ = Type::Unit;
+            Type::Unit
+        }
 
         Ast::Function {
             name,

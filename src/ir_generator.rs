@@ -141,6 +141,8 @@ fn generate_ir(root_types: HashMap<IRVar, Type>, root_ast: Ast) -> Vec<Instructi
         &mut root_symbol_table,
         &mut free,
         &root_ast,
+        None,
+        None,
     );
 
     // Print return value of root block if not unit
@@ -196,6 +198,8 @@ fn visit(
     sym_table: &mut Vec<HashMap<String, IRVar>>,
     free: &mut usize,
     ast: &Ast,
+    b_start_label: Option<&Instruction>,
+    b_end_label: Option<&Instruction>,
 ) -> IRVar {
     match ast {
         Ast::NoneLiteral { .. } => IRVar(String::from("unit")),
@@ -236,8 +240,24 @@ fn visit(
         } => {
             match op.as_str() {
                 "=" => {
-                    let var_left = visit(ins, var_types, sym_table, free, left);
-                    let var_right = visit(ins, var_types, sym_table, free, right);
+                    let var_left = visit(
+                        ins,
+                        var_types,
+                        sym_table,
+                        free,
+                        left,
+                        b_start_label,
+                        b_end_label,
+                    );
+                    let var_right = visit(
+                        ins,
+                        var_types,
+                        sym_table,
+                        free,
+                        right,
+                        b_start_label,
+                        b_end_label,
+                    );
                     ins.push(Instruction::Copy {
                         loc: *loc,
                         source: var_right.clone(),
@@ -251,7 +271,15 @@ fn visit(
                     let end_label = new_label(loc, free);
                     let result = new_var(var_types, free, Type::Bool);
 
-                    let var_left = visit(ins, var_types, sym_table, free, left);
+                    let var_left = visit(
+                        ins,
+                        var_types,
+                        sym_table,
+                        free,
+                        left,
+                        b_start_label,
+                        b_end_label,
+                    );
                     ins.push(Instruction::CondJump {
                         loc: *loc,
                         cond: var_left,
@@ -273,7 +301,15 @@ fn visit(
 
                     // No short circuit; parse other term.
                     ins.push(other_label);
-                    let var_right = visit(ins, var_types, sym_table, free, right);
+                    let var_right = visit(
+                        ins,
+                        var_types,
+                        sym_table,
+                        free,
+                        right,
+                        b_start_label,
+                        b_end_label,
+                    );
                     ins.push(Instruction::Copy {
                         loc: *loc,
                         source: var_right,
@@ -290,7 +326,15 @@ fn visit(
                     let end_label = new_label(loc, free);
                     let result = new_var(var_types, free, Type::Bool);
 
-                    let var_left = visit(ins, var_types, sym_table, free, left);
+                    let var_left = visit(
+                        ins,
+                        var_types,
+                        sym_table,
+                        free,
+                        left,
+                        b_start_label,
+                        b_end_label,
+                    );
                     ins.push(Instruction::CondJump {
                         loc: *loc,
                         cond: var_left,
@@ -312,7 +356,15 @@ fn visit(
 
                     // No short circuit; parse other term.
                     ins.push(other_label);
-                    let var_right = visit(ins, var_types, sym_table, free, right);
+                    let var_right = visit(
+                        ins,
+                        var_types,
+                        sym_table,
+                        free,
+                        right,
+                        b_start_label,
+                        b_end_label,
+                    );
                     ins.push(Instruction::Copy {
                         loc: *loc,
                         source: var_right,
@@ -325,8 +377,24 @@ fn visit(
                 }
                 _ => {
                     let var_op = sym_table[0][op].clone();
-                    let var_left = visit(ins, var_types, sym_table, free, left);
-                    let var_right = visit(ins, var_types, sym_table, free, right);
+                    let var_left = visit(
+                        ins,
+                        var_types,
+                        sym_table,
+                        free,
+                        left,
+                        b_start_label,
+                        b_end_label,
+                    );
+                    let var_right = visit(
+                        ins,
+                        var_types,
+                        sym_table,
+                        free,
+                        right,
+                        b_start_label,
+                        b_end_label,
+                    );
                     let var_result = new_var(var_types, free, typ.clone());
                     ins.push(Instruction::Call {
                         loc: *loc,
@@ -359,7 +427,15 @@ fn visit(
             }
 
             let var_op = sym_table[0][&String::from("unary_minus")].clone();
-            let var_value = visit(ins, var_types, sym_table, free, stat);
+            let var_value = visit(
+                ins,
+                var_types,
+                sym_table,
+                free,
+                stat,
+                b_start_label,
+                b_end_label,
+            );
             let var_result = new_var(var_types, free, typ.clone());
             ins.push(Instruction::Call {
                 loc: *loc,
@@ -371,7 +447,15 @@ fn visit(
         }
         Ast::Negate { stat, typ, loc } => {
             let var_op = sym_table[0][&String::from("unary_not")].clone();
-            let var_value = visit(ins, var_types, sym_table, free, stat);
+            let var_value = visit(
+                ins,
+                var_types,
+                sym_table,
+                free,
+                stat,
+                b_start_label,
+                b_end_label,
+            );
             let var_result = new_var(var_types, free, typ.clone());
             ins.push(Instruction::Call {
                 loc: *loc,
@@ -386,7 +470,15 @@ fn visit(
             sym_table.push(HashMap::new());
             let mut block_var = IRVar(String::from("unit"));
             for stat in stats {
-                block_var = visit(ins, var_types, sym_table, free, stat);
+                block_var = visit(
+                    ins,
+                    var_types,
+                    sym_table,
+                    free,
+                    stat,
+                    b_start_label,
+                    b_end_label,
+                );
             }
             sym_table.pop();
             block_var
@@ -395,7 +487,15 @@ fn visit(
             sym_table.push(HashMap::new());
             let mut block_var = IRVar(String::from("unit"));
             for stat in stats {
-                block_var = visit(ins, var_types, sym_table, free, stat);
+                block_var = visit(
+                    ins,
+                    var_types,
+                    sym_table,
+                    free,
+                    stat,
+                    b_start_label,
+                    b_end_label,
+                );
             }
             sym_table.pop();
             block_var
@@ -415,7 +515,15 @@ fn visit(
                 .unwrap()
                 .insert(name.clone(), new_var.clone());
 
-            let value = visit(ins, var_types, sym_table, free, stat);
+            let value = visit(
+                ins,
+                var_types,
+                sym_table,
+                free,
+                stat,
+                b_start_label,
+                b_end_label,
+            );
             ins.push(Instruction::Copy {
                 loc: *loc,
                 source: value,
@@ -433,7 +541,15 @@ fn visit(
         } => {
             let mut params_vars = vec![];
             for param in params.iter() {
-                params_vars.push(visit(ins, var_types, sym_table, free, param));
+                params_vars.push(visit(
+                    ins,
+                    var_types,
+                    sym_table,
+                    free,
+                    param,
+                    b_start_label,
+                    b_end_label,
+                ));
             }
 
             let mut fun = None;
@@ -464,7 +580,15 @@ fn visit(
             let then_label = new_label(loc, free);
             let else_label = new_label(loc, free);
 
-            let cond_var = visit(ins, var_types, sym_table, free, cond);
+            let cond_var = visit(
+                ins,
+                var_types,
+                sym_table,
+                free,
+                cond,
+                b_start_label,
+                b_end_label,
+            );
             ins.push(Instruction::CondJump {
                 loc: *loc,
                 cond: cond_var,
@@ -475,7 +599,15 @@ fn visit(
             match &**els {
                 None => {
                     ins.push(then_label);
-                    visit(ins, var_types, sym_table, free, then);
+                    visit(
+                        ins,
+                        var_types,
+                        sym_table,
+                        free,
+                        then,
+                        b_start_label,
+                        b_end_label,
+                    );
 
                     ins.push(else_label); // Use else label as end label.
 
@@ -486,7 +618,15 @@ fn visit(
                     let result = new_var(var_types, free, typ.clone());
 
                     ins.push(then_label);
-                    let then_value = visit(ins, var_types, sym_table, free, then);
+                    let then_value = visit(
+                        ins,
+                        var_types,
+                        sym_table,
+                        free,
+                        then,
+                        b_start_label,
+                        b_end_label,
+                    );
                     ins.push(Instruction::Copy {
                         loc: *loc,
                         source: then_value,
@@ -498,7 +638,15 @@ fn visit(
                     });
 
                     ins.push(else_label);
-                    let else_value = visit(ins, var_types, sym_table, free, els);
+                    let else_value = visit(
+                        ins,
+                        var_types,
+                        sym_table,
+                        free,
+                        els,
+                        b_start_label,
+                        b_end_label,
+                    );
                     ins.push(Instruction::Copy {
                         loc: *loc,
                         source: else_value,
@@ -520,7 +668,15 @@ fn visit(
 
             // Condition check
             ins.push(cond_label.clone());
-            let cond_var = visit(ins, var_types, sym_table, free, cond);
+            let cond_var = visit(
+                ins,
+                var_types,
+                sym_table,
+                free,
+                cond,
+                b_start_label,
+                b_end_label,
+            );
             ins.push(Instruction::CondJump {
                 loc: *loc,
                 cond: cond_var,
@@ -530,7 +686,15 @@ fn visit(
 
             // Loop
             ins.push(do_label.clone());
-            visit(ins, var_types, sym_table, free, then);
+            visit(
+                ins,
+                var_types,
+                sym_table,
+                free,
+                then,
+                Some(&cond_label),
+                Some(&end_label),
+            );
             ins.push(Instruction::Jump {
                 loc: *loc,
                 label: Box::new(cond_label),
@@ -540,5 +704,25 @@ fn visit(
 
             IRVar(String::from("unit"))
         }
+        Ast::Continue { loc, .. } => match b_start_label {
+            Some(label) => {
+                ins.push(Instruction::Jump {
+                    loc: *loc,
+                    label: Box::new(label.clone()),
+                });
+                IRVar(String::from("unit"))
+            }
+            None => panic!("{loc:?}: Cannot use continue outside of a loop"),
+        },
+        Ast::Break { loc, .. } => match b_end_label {
+            Some(label) => {
+                ins.push(Instruction::Jump {
+                    loc: *loc,
+                    label: Box::new(label.clone()),
+                });
+                IRVar(String::from("unit"))
+            }
+            None => panic!("{loc:?}: Cannot use break outside of a loop"),
+        },
     }
 }

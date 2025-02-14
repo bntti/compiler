@@ -56,6 +56,14 @@ pub enum Ast {
         typ: Type,
         loc: Location,
     },
+    Continue {
+        typ: Type,
+        loc: Location,
+    },
+    Break {
+        typ: Type,
+        loc: Location,
+    },
     While {
         cond: Box<Ast>,
         then: Box<Ast>,
@@ -447,7 +455,6 @@ fn parse_term(tokens: &Vec<Token>, pos: &mut usize) -> Ast {
         TokenType::Integer => return parse_int_literal(tokens, pos),
         TokenType::Identifier => {
             let id_token = consume(tokens, pos, Expected::Token(TokenType::Identifier));
-            let name = id_token.value.clone(); // Inoptimal?
 
             let identifier = match id_token.value.as_str() {
                 "true" => Ast::BoolLiteral {
@@ -460,8 +467,20 @@ fn parse_term(tokens: &Vec<Token>, pos: &mut usize) -> Ast {
                     typ: Type::Unk,
                     loc: id_token.location,
                 },
+                "continue" => {
+                    return Ast::Continue {
+                        typ: Type::Unk,
+                        loc: token.location,
+                    };
+                }
+                "break" => {
+                    return Ast::Break {
+                        typ: Type::Unk,
+                        loc: token.location,
+                    };
+                }
                 _ => Ast::Identifier {
-                    name: id_token.value,
+                    name: id_token.value.clone(),
                     typ: Type::Unk,
                     loc: id_token.location,
                 },
@@ -489,7 +508,7 @@ fn parse_term(tokens: &Vec<Token>, pos: &mut usize) -> Ast {
                 if peek(tokens, *pos).value == ")" {
                     consume(tokens, pos, Expected::String(String::from(")")));
                     return Ast::Function {
-                        name,
+                        name: id_token.value,
                         params,
                         typ: Type::Unk,
                         loc: id_token.location,

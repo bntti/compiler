@@ -153,6 +153,8 @@ fn interpret(node: &Ast, variables: &mut Vec<HashMap<String, Value>>) -> Value {
             "%" => Value::Int(interpret_int(left, variables) % interpret_int(right, variables)),
             _ => panic!("{loc:?}: Invalid operator {op}"),
         },
+
+        _ => unimplemented!(),
     }
 }
 

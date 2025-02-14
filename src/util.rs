@@ -29,6 +29,8 @@ pub fn ast_loc(ast: &Ast) -> Location {
         Ast::Root { loc, .. } => *loc,
         Ast::Var { loc, .. } => *loc,
         Ast::While { loc, .. } => *loc,
+        Ast::Continue { loc, .. } => *loc,
+        Ast::Break { loc, .. } => *loc,
     }
 }
 
