@@ -103,7 +103,7 @@ impl Display for Instruction {
     }
 }
 
-pub fn run_ir_gen(root_ast: Ast) -> HashMap<String, (Vec<IRVar>, Vec<Instruction>)> {
+pub fn run_ir_gen(root_ast: Ast) -> HashMap<String, (Vec<IRVar>, Vec<Instruction>, Type)> {
     // The type is actually not Unit, but we do not need the type for now
     let mut root_types = HashMap::from([
         (IRVar(String::from("<")), Type::Unit),
@@ -135,13 +135,14 @@ pub fn run_ir_gen(root_ast: Ast) -> HashMap<String, (Vec<IRVar>, Vec<Instruction
     }
 
     // Add main
-    let mut functions =
-        HashMap::from([(String::from("main"), generate_ir(&root_types, &root_ast))]);
+    let (params, ins) = generate_ir(&root_types, &root_ast);
+    let mut functions = HashMap::from([(String::from("main"), (params, ins, Type::Int))]);
 
     // Find functions
     for ast in stats {
-        if let Ast::Fn { ref name, .. } = ast {
-            functions.insert(name.clone(), generate_ir(&root_types, ast));
+        if let Ast::Fn { ref name, typ, .. } = ast {
+            let (params, ins) = generate_ir(&root_types, ast);
+            functions.insert(name.clone(), (params, ins, typ.clone()));
         }
     }
 

@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use crate::{
     as_intrinsics::parse_intrinsics,
     ir_generator::{IRVar, Instruction},
+    parser::Type,
     svec,
     util::label_name,
 };
@@ -48,7 +49,7 @@ pub fn emit(lines: &mut Vec<String>, line: String) {
     lines.push(line);
 }
 
-pub fn run_as_gen(instructions: HashMap<String, (Vec<IRVar>, Vec<Instruction>)>) -> String {
+pub fn run_as_gen(instructions: HashMap<String, (Vec<IRVar>, Vec<Instruction>, Type)>) -> String {
     let mut output = String::from(
         r#"
     .extern print_int
@@ -61,13 +62,19 @@ pub fn run_as_gen(instructions: HashMap<String, (Vec<IRVar>, Vec<Instruction>)>)
         "#,
     );
     for (name, ins) in instructions.iter() {
-        let fn_output = run_as_gen_function(name, &ins.0, &ins.1);
+        let fn_output = run_as_gen_function(name, &ins.0, &ins.1, &ins.2);
         output.push_str(&fn_output);
+        output.push('\n');
     }
     output
 }
 
-fn run_as_gen_function(name: &String, params: &[IRVar], instructions: &[Instruction]) -> String {
+fn run_as_gen_function(
+    name: &String,
+    params: &[IRVar],
+    instructions: &[Instruction],
+    typ: &Type,
+) -> String {
     let mut locals = init_locals(instructions);
     for param in params {
         add_var(&mut locals, param.clone());
@@ -178,13 +185,12 @@ fn run_as_gen_function(name: &String, params: &[IRVar], instructions: &[Instruct
         }
     }
 
-    if name.as_str() == "main" {
+    if name.as_str() == "main" || matches!(typ, Type::Unit) {
         lines.extend(svec![
             "movq $0, %rax",
             "movq %rbp, %rsp",
             "popq %rbp",
             "ret",
-            "" // Add extra newline to stop assembler from complaining
         ]);
     } else {
         // TODO: Add assembly that panics
