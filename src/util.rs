@@ -19,6 +19,7 @@ pub fn ast_loc(ast: &Ast) -> Location {
         Ast::BinaryOp { loc, .. } => *loc,
         Ast::Block { loc, .. } => *loc,
         Ast::BoolLiteral { loc, .. } => *loc,
+        Ast::Fn { loc, .. } => *loc,
         Ast::FnCall { loc, .. } => *loc,
         Ast::Identifier { loc, .. } => *loc,
         Ast::If { loc, .. } => *loc,
@@ -26,11 +27,12 @@ pub fn ast_loc(ast: &Ast) -> Location {
         Ast::UnaryMinus { loc, .. } => *loc,
         Ast::UnaryNot { loc, .. } => *loc,
         Ast::NoneLiteral { loc, .. } => *loc,
-        Ast::Root { loc, .. } => *loc,
+        Ast::Module { loc, .. } => *loc,
         Ast::Var { loc, .. } => *loc,
         Ast::While { loc, .. } => *loc,
         Ast::Continue { loc, .. } => *loc,
         Ast::Break { loc, .. } => *loc,
+        Ast::Return { loc, .. } => *loc,
     }
 }
 

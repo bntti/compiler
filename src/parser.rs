@@ -15,7 +15,7 @@ pub enum Type {
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Ast {
-    Root {
+    Module {
         stats: Vec<Ast>,
         typ: Type,
         loc: Location,
@@ -25,9 +25,21 @@ pub enum Ast {
         typ: Type,
         loc: Location,
     },
+    Fn {
+        name: String,
+        param_types: Vec<(String, Type)>,
+        block: Box<Ast>,
+        typ: Type,
+        loc: Location,
+    },
     FnCall {
         name: String,
         params: Vec<Ast>,
+        typ: Type,
+        loc: Location,
+    },
+    Return {
+        stat: Box<Ast>,
         typ: Type,
         loc: Location,
     },
@@ -166,140 +178,167 @@ fn parse_int_literal(tokens: &[Token], pos: &mut usize) -> Ast {
 
 pub fn parse(tokens: Vec<Token>) -> Ast {
     let mut pos = 0;
-    parse_block(
-        &tokens,
-        &mut pos,
-        Ast::Root {
-            stats: vec![],
-            typ: Type::Unk,
-            loc: loc!(0, 0),
-        },
-    )
+    parse_module(&tokens, &mut pos)
 }
 
-fn parse_block(tokens: &Vec<Token>, pos: &mut usize, parent: Ast) -> Ast {
+fn parse_module(tokens: &Vec<Token>, pos: &mut usize) -> Ast {
     let mut statements = vec![];
-    match parent {
-        Ast::Root {
-            loc: block_location,
-            ..
-        } => {
-            while peek(tokens, *pos).token_type != TokenType::End {
-                statements.push(parse_line(tokens, pos));
+    while peek(tokens, *pos).token_type != TokenType::End {
+        statements.push(parse_line(tokens, pos, true));
 
-                let mut semi = false;
-                let token = peek(tokens, *pos);
-                let location = token.location;
-                if token.value.as_str() == ";" {
-                    consume(tokens, pos, Expected::Semi);
-                    semi = true;
-                }
+        let mut semi = false;
+        let token = peek(tokens, *pos);
+        let location = token.location;
+        if token.value.as_str() == ";" {
+            consume(tokens, pos, Expected::Semi);
+            semi = true;
+        }
 
-                let token = peek(tokens, *pos);
-                if matches!(token.token_type, TokenType::End) {
-                    if semi {
-                        statements.push(Ast::NoneLiteral {
-                            typ: Type::Unk,
-                            loc: location,
-                        });
-                    }
-                    return Ast::Root {
-                        stats: statements,
-                        typ: Type::Unk,
-                        loc: block_location,
-                    };
-                }
-
-                // Don't require ';' after braces
-                if !semi && peek_back(tokens, *pos).value != "}" {
-                    panic!("{location:?}: expected ';'");
-                }
-            }
-
-            // Only happens if empty root block
-            Ast::Root {
-                stats: vec![Ast::NoneLiteral {
+        let token = peek(tokens, *pos);
+        if matches!(token.token_type, TokenType::End) {
+            if semi {
+                statements.push(Ast::NoneLiteral {
                     typ: Type::Unk,
-                    loc: block_location,
-                }],
+                    loc: location,
+                });
+            }
+            return Ast::Module {
+                stats: statements,
                 typ: Type::Unk,
-                loc: block_location,
-            }
+                loc: loc!(0, 0),
+            };
         }
-        Ast::Block {
-            loc: block_location,
-            ..
-        } => {
-            while peek(tokens, *pos).token_type != TokenType::End {
-                statements.push(parse_line(tokens, pos));
 
-                let mut semi = false;
-                let token = peek(tokens, *pos);
-                let location = token.location;
-                if token.value.as_str() == ";" {
-                    consume(tokens, pos, Expected::Semi);
-                    semi = true;
-                }
-
-                let token = peek(tokens, *pos);
-                if token.value.as_str() == "}" {
-                    if semi {
-                        statements.push(Ast::NoneLiteral {
-                            typ: Type::Unk,
-                            loc: location,
-                        });
-                    }
-                    consume(tokens, pos, Expected::String(String::from("}")));
-                    return Ast::Block {
-                        stats: statements,
-                        typ: Type::Unk,
-                        loc: block_location,
-                    };
-                }
-
-                // Don't require ';' after braces
-                if !semi && peek_back(tokens, *pos).value != "}" {
-                    panic!("{location:?}: expected ';'");
-                }
-            }
-            panic!("Unexpected end of code, missing '}}'");
+        // Don't require ';' after braces
+        if !semi && peek_back(tokens, *pos).value != "}" {
+            panic!("{location:?}: expected ';'");
         }
-        _ => panic!("Expected block"),
+    }
+
+    // Only happens if empty module
+    Ast::Module {
+        stats: vec![Ast::NoneLiteral {
+            typ: Type::Unk,
+            loc: loc!(0, 0),
+        }],
+        typ: Type::Unk,
+        loc: loc!(0, 0),
     }
 }
 
-fn parse_line(tokens: &Vec<Token>, pos: &mut usize) -> Ast {
+fn parse_block(tokens: &Vec<Token>, pos: &mut usize) -> Ast {
+    let brace_token = consume(tokens, pos, Expected::String(String::from("{")));
+
+    let mut statements = vec![];
+
+    while peek(tokens, *pos).token_type != TokenType::End {
+        statements.push(parse_line(tokens, pos, false));
+
+        let mut semi = false;
+        let token = peek(tokens, *pos);
+        let location = token.location;
+        if token.value.as_str() == ";" {
+            consume(tokens, pos, Expected::Semi);
+            semi = true;
+        }
+
+        let token = peek(tokens, *pos);
+        if token.value.as_str() == "}" {
+            if semi {
+                statements.push(Ast::NoneLiteral {
+                    typ: Type::Unk,
+                    loc: location,
+                });
+            }
+            consume(tokens, pos, Expected::String(String::from("}")));
+            return Ast::Block {
+                stats: statements,
+                typ: Type::Unk,
+                loc: brace_token.location,
+            };
+        }
+
+        // Don't require ';' after braces
+        if !semi && peek_back(tokens, *pos).value != "}" {
+            panic!("{location:?}: expected ';'");
+        }
+    }
+    panic!("Unexpected end of code, missing '}}'");
+}
+
+fn parse_type(tokens: &[Token], pos: &mut usize) -> Type {
+    let token = consume(tokens, pos, Expected::Token(TokenType::Identifier));
+    let location = token.location;
+    let typ_str = &token.value;
+
+    match typ_str.as_str() {
+        "Int" => Type::Int,
+        "Bool" => Type::Bool,
+        "Unit" => Type::Unit,
+        _ => panic!("{location:?}: Unknown type {typ_str}"),
+    }
+}
+
+fn parse_line(tokens: &Vec<Token>, pos: &mut usize, module: bool) -> Ast {
     let token = peek(tokens, *pos);
 
     match token.value.as_str() {
         "var" => {
             let var_token = consume(tokens, pos, Expected::String(String::from("var")));
             let identifier = consume(tokens, pos, Expected::Token(TokenType::Identifier));
-            let var_name = identifier.value.clone(); // Inoptimal?
 
             let mut typ = Type::Unk;
             if peek(tokens, *pos).value.as_str() == ":" {
                 consume(tokens, pos, Expected::String(String::from(":")));
-                let typ_token = consume(tokens, pos, Expected::Token(TokenType::Identifier));
-                let location = typ_token.location;
-                let typ_str = typ_token.value;
-
-                typ = match typ_str.as_str() {
-                    "Int" => Type::Int,
-                    "Bool" => Type::Bool,
-                    "Unit" => Type::Unit,
-                    _ => panic!("{location:?}: Unknown type {typ_str}"),
-                }
+                typ = parse_type(tokens, pos);
             }
 
             consume(tokens, pos, Expected::String(String::from("=")));
             let value = parse_expression(tokens, pos, 0);
 
             Ast::Var {
-                name: var_name,
+                name: identifier.value,
                 value: Box::new(value),
                 typ,
                 loc: var_token.location,
+            }
+        }
+        "fun" if module => {
+            let location = consume(tokens, pos, Expected::String(String::from("fun"))).location;
+            let name = consume(tokens, pos, Expected::Token(TokenType::Identifier)).value;
+
+            // Parse params
+            let mut params = vec![];
+            consume(tokens, pos, Expected::String(String::from("(")));
+            while peek(tokens, *pos).token_type != TokenType::End {
+                // New param
+                if peek(tokens, *pos).value != ")" {
+                    let var_name =
+                        consume(tokens, pos, Expected::Token(TokenType::Identifier)).value;
+                    consume(tokens, pos, Expected::String(String::from(":")));
+                    let var_type = parse_type(tokens, pos);
+                    params.push((var_name, var_type));
+                }
+                // End of params
+                if peek(tokens, *pos).value == ")" {
+                    consume(tokens, pos, Expected::String(String::from(")")));
+                    break;
+                }
+                consume(tokens, pos, Expected::String(String::from(",")));
+            }
+
+            // Return type
+            consume(tokens, pos, Expected::String(String::from(":")));
+            let ret_type = parse_type(tokens, pos);
+
+            let block = parse_block(tokens, pos);
+
+            Ast::Fn {
+                name,
+                param_types: params,
+                block: Box::new(block),
+                typ: ret_type,
+                loc: location,
             }
         }
         _ => parse_expression(tokens, pos, 0),
@@ -396,21 +435,35 @@ fn parse_term(tokens: &Vec<Token>, pos: &mut usize) -> Ast {
             let while_token = consume(tokens, pos, Expected::String(String::from("while")));
             let cond = parse_expression(tokens, pos, 0);
             consume(tokens, pos, Expected::String(String::from("do")));
-            let brace_token = consume(tokens, pos, Expected::String(String::from("{")));
-            let then = parse_block(
-                tokens,
-                pos,
-                Ast::Block {
-                    stats: vec![],
-                    typ: Type::Unk,
-                    loc: brace_token.location,
-                },
-            );
+            let then = parse_block(tokens, pos);
             return Ast::While {
                 cond: Box::new(cond),
                 then: Box::new(then),
                 typ: Type::Unk,
                 loc: while_token.location,
+            };
+        }
+        "continue" => {
+            consume(tokens, pos, Expected::String(String::from("continue")));
+            return Ast::Continue {
+                typ: Type::Unk,
+                loc: token.location,
+            };
+        }
+        "break" => {
+            consume(tokens, pos, Expected::String(String::from("break")));
+            return Ast::Break {
+                typ: Type::Unk,
+                loc: token.location,
+            };
+        }
+        "return" => {
+            consume(tokens, pos, Expected::String(String::from("return")));
+            let stat = parse_expression(tokens, pos, 0);
+            return Ast::Return {
+                stat: Box::new(stat),
+                typ: Type::Unk,
+                loc: token.location,
             };
         }
         "-" => {
@@ -438,16 +491,7 @@ fn parse_term(tokens: &Vec<Token>, pos: &mut usize) -> Ast {
             return expression;
         }
         "{" => {
-            let token = consume(tokens, pos, Expected::String(String::from("{")));
-            return parse_block(
-                tokens,
-                pos,
-                Ast::Block {
-                    stats: vec![],
-                    typ: Type::Unk,
-                    loc: token.location,
-                },
-            );
+            return parse_block(tokens, pos);
         }
         _ => {}
     }
@@ -467,18 +511,6 @@ fn parse_term(tokens: &Vec<Token>, pos: &mut usize) -> Ast {
                     typ: Type::Unk,
                     loc: id_token.location,
                 },
-                "continue" => {
-                    return Ast::Continue {
-                        typ: Type::Unk,
-                        loc: token.location,
-                    };
-                }
-                "break" => {
-                    return Ast::Break {
-                        typ: Type::Unk,
-                        loc: token.location,
-                    };
-                }
                 _ => Ast::Identifier {
                     name: id_token.value.clone(),
                     typ: Type::Unk,
@@ -531,12 +563,12 @@ mod tests {
 
     // Macro rules to make creating asts manually easier
     // Root
-    macro_rules! rast {
+    macro_rules! mast {
         () => (
-            Ast::Root{stats: Vec::new(),typ: Type::Unk, loc: loc!()}
+            Ast::Module{stats: Vec::new(),typ: Type::Unk, loc: loc!()}
         );
         ($($x:expr),+ $(,)?) => (
-            Ast::Root{stats: vec![$($x),+], typ: Type::Unk,loc: loc!()}
+            Ast::Module{stats: vec![$($x),+], typ: Type::Unk,loc: loc!()}
         );
     }
     // Block
@@ -656,21 +688,21 @@ mod tests {
     #[test]
     fn test_simple_addition() {
         let tokens = tokenize(String::from("1+1;"));
-        let expected = rast![bast![iast!(1), "+", iast!(1)], nast!()];
+        let expected = mast![bast![iast!(1), "+", iast!(1)], nast!()];
         assert_eq!(parse(tokens), expected);
     }
 
     #[test]
     fn test_simple_addition_with_identifiers() {
         let tokens = tokenize(String::from("x-50;"));
-        let expected = rast![bast![idast!("x"), "-", iast!(50)], nast!()];
+        let expected = mast![bast![idast!("x"), "-", iast!(50)], nast!()];
         assert_eq!(parse(tokens), expected);
     }
 
     #[test]
     fn test_multiple_additions() {
         let tokens = tokenize(String::from("2-3+4;"));
-        let expected = rast![
+        let expected = mast![
             bast![bast![iast!(2), "-", iast!(3)], "+", iast!(4)],
             nast!()
         ];
@@ -680,7 +712,7 @@ mod tests {
     #[test]
     fn test_multiplication() {
         let tokens = tokenize(String::from("1*2/3;"));
-        let expected = rast![
+        let expected = mast![
             bast![bast![iast!(1), "*", iast!(2)], "/", iast!(3)],
             nast!()
         ];
@@ -690,7 +722,7 @@ mod tests {
     #[test]
     fn test_multiplication_and_addition() {
         let tokens = tokenize(String::from("1+2*3;"));
-        let expected = rast![
+        let expected = mast![
             bast![iast!(1), "+", bast![iast!(2), "*", iast!(3)]],
             nast!()
         ];
@@ -700,7 +732,7 @@ mod tests {
     #[test]
     fn test_parenthesis() {
         let tokens = tokenize(String::from("(1+2)*3;"));
-        let expected = rast![
+        let expected = mast![
             bast![bast![iast!(1), "+", iast!(2)], "*", iast!(3)],
             nast!()
         ];
@@ -710,26 +742,26 @@ mod tests {
     #[test]
     fn test_empty() {
         let tokens = tokenize(String::from(""));
-        let expected = rast![nast!()];
+        let expected = mast![nast!()];
         assert_eq!(parse(tokens), expected);
     }
 
     #[test]
     fn test_var() {
         let tokens = tokenize(String::from("var x = 2;"));
-        let expected = rast![vast!("x", iast!(2)), nast!()];
+        let expected = mast![vast!("x", iast!(2)), nast!()];
         assert_eq!(parse(tokens), expected);
     }
     #[test]
     fn test_while() {
         let tokens = tokenize(String::from("while x do { var y = 2; }"));
-        let expected = rast![wast!(idast!("x"), blast![vast!("y", iast!(2)), nast!()])];
+        let expected = mast![wast!(idast!("x"), blast![vast!("y", iast!(2)), nast!()])];
         assert_eq!(parse(tokens), expected);
     }
     #[test]
     fn test_equality() {
         let tokens = tokenize(String::from("a = b = c;"));
-        let expected = rast![
+        let expected = mast![
             bast![idast!("a"), "=", bast![idast!("b"), "=", idast!("c")]],
             nast!()
         ];
@@ -738,7 +770,7 @@ mod tests {
     #[test]
     fn test_function_call() {
         let tokens = tokenize(String::from("f(a, b, 1+c);"));
-        let expected = rast![
+        let expected = mast![
             fast![idast!("a"), idast!("b"), bast![iast!(1), "+", idast!("c")]],
             nast!()
         ];
@@ -747,7 +779,7 @@ mod tests {
     #[test]
     fn test_returning_from_block() {
         let tokens = tokenize(String::from("a = {f(a); x=y; f(x)};"));
-        let expected = rast![
+        let expected = mast![
             bast![
                 idast!("a"),
                 "=",
@@ -764,7 +796,7 @@ mod tests {
     #[test]
     fn test_if() {
         let tokens = tokenize(String::from("a = if b then c else d;"));
-        let expected = rast![
+        let expected = mast![
             bast![
                 idast!("a"),
                 "=",
@@ -778,7 +810,7 @@ mod tests {
     #[test]
     fn test_binary_ops() {
         let tokens = tokenize(String::from("n / 2 == 0;"));
-        let expected = rast![
+        let expected = mast![
             bast!(bast!(idast!("n"), "/", iast!(2)), "==", iast!(0)),
             nast!()
         ];
@@ -788,7 +820,7 @@ mod tests {
     #[test]
     fn test_binary_ops_in_if() {
         let tokens = tokenize(String::from("if n / 2 == 0 then 1;"));
-        let expected = rast![
+        let expected = mast![
             ifast!(
                 bast!(bast!(idast!("n"), "/", iast!(2)), "==", iast!(0)),
                 iast!(1)
@@ -821,13 +853,13 @@ mod tests {
         #[test]
         fn test_blocks() {
             let tokens = tokenize(String::from("{ { a } { b } }"));
-            let expected = rast![blast![blast![idast!("a")], blast![idast!("b")]]];
+            let expected = mast![blast![blast![idast!("a")], blast![idast!("b")]]];
             assert_eq!(parse(tokens), expected);
         }
         #[test]
         fn test_blocks_2() {
             let tokens = tokenize(String::from("{ if true then { a } b }"));
-            let expected = rast![blast![
+            let expected = mast![blast![
                 ifast!(boast!(true), blast![idast!("a")]),
                 idast!("b")
             ]];
@@ -836,7 +868,7 @@ mod tests {
         #[test]
         fn test_blocks_3() {
             let tokens = tokenize(String::from("{ if true then { a }; b }"));
-            let expected = rast![blast![
+            let expected = mast![blast![
                 ifast!(boast!(true), blast![idast!("a")]),
                 idast!("b")
             ]];
@@ -845,7 +877,7 @@ mod tests {
         #[test]
         fn test_blocks_4() {
             let tokens = tokenize(String::from("{ if true then { a }; b; c }"));
-            let expected = rast![blast![
+            let expected = mast![blast![
                 ifast!(boast!(true), blast![idast!("a")]),
                 idast!("b"),
                 idast!("c")
@@ -855,7 +887,7 @@ mod tests {
         #[test]
         fn test_blocks_5() {
             let tokens = tokenize(String::from("{ if true then { a } else { b } 3 }"));
-            let expected = rast![blast![
+            let expected = mast![blast![
                 ifast!(boast!(true), blast![idast!("a")], blast![idast!("b")]),
                 iast!(3)
             ]];
@@ -864,7 +896,7 @@ mod tests {
         #[test]
         fn test_blocks_6() {
             let tokens = tokenize(String::from("x = { { f(a) } { b } }"));
-            let expected = rast![bast!(
+            let expected = mast![bast!(
                 idast!("x"),
                 "=",
                 blast![blast![fast![idast!("a")]], blast![idast!("b")]]

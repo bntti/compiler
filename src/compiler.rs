@@ -38,17 +38,20 @@ pub fn compile(source_code: String) -> Vec<u8> {
     run_typecheck(&mut ast);
 
     // IR generator
-    let ir = run_ir_gen(ast);
+    let functions = run_ir_gen(ast);
     if DEBUG {
         println!("\x1b[1mIR generator output\x1b[0;48;2;30;30;30m");
-        for ins in ir.iter() {
-            println!("{ins}");
+        for (name, instructions) in functions.iter() {
+            println!("{name}:");
+            for ins in &instructions.1 {
+                println!("{ins}");
+            }
         }
         println!("\x1b[0m\n");
     }
 
     // Assembly generator
-    let assembly = run_as_gen(&ir);
+    let assembly = run_as_gen(functions);
     if DEBUG {
         println!("\x1b[1mAssembly generator output\x1b[0;48;2;30;30;30m");
         println!("{assembly}");

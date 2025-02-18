@@ -47,6 +47,10 @@ pub enum Instruction {
         loc: Location,
         name: String,
     },
+    Return {
+        loc: Location,
+        value: IRVar,
+    },
 }
 
 impl Display for IRVar {
@@ -92,13 +96,16 @@ impl Display for Instruction {
             Instruction::Label { name, .. } => {
                 write!(f, "Label({name})")
             }
+            Instruction::Return { value, .. } => {
+                write!(f, "Return({value})")
+            }
         }
     }
 }
 
-pub fn run_ir_gen(root_ast: Ast) -> Vec<Instruction> {
+pub fn run_ir_gen(root_ast: Ast) -> HashMap<String, (Vec<IRVar>, Vec<Instruction>)> {
     // The type is actually not Unit, but we do not need the type for now
-    let root_types = HashMap::from([
+    let mut root_types = HashMap::from([
         (IRVar(String::from("<")), Type::Unit),
         (IRVar(String::from("<=")), Type::Unit),
         (IRVar(String::from(">")), Type::Unit),
@@ -116,10 +123,35 @@ pub fn run_ir_gen(root_ast: Ast) -> Vec<Instruction> {
         (IRVar(String::from("print_int")), Type::Unit),
         (IRVar(String::from("print_bool")), Type::Unit),
     ]);
-    generate_ir(root_types, root_ast)
+
+    // Add functions to root_types
+    let Ast::Module { ref stats, .. } = root_ast else {
+        unreachable!()
+    };
+    for stat in stats {
+        if let Ast::Fn { name, typ, .. } = stat {
+            root_types.insert(IRVar(name.clone()), typ.clone());
+        }
+    }
+
+    // Add main
+    let mut functions =
+        HashMap::from([(String::from("main"), generate_ir(&root_types, &root_ast))]);
+
+    // Find functions
+    for ast in stats {
+        if let Ast::Fn { ref name, .. } = ast {
+            functions.insert(name.clone(), generate_ir(&root_types, ast));
+        }
+    }
+
+    functions
 }
 
-fn generate_ir(root_types: HashMap<IRVar, Type>, root_ast: Ast) -> Vec<Instruction> {
+fn generate_ir(
+    root_types: &HashMap<IRVar, Type>,
+    root_ast: &Ast,
+) -> (Vec<IRVar>, Vec<Instruction>) {
     let mut var_types = root_types.clone();
     let var_unit = IRVar(String::from("unit"));
     var_types.insert(var_unit.clone(), Type::Unit);
@@ -131,19 +163,38 @@ fn generate_ir(root_types: HashMap<IRVar, Type>, root_ast: Ast) -> Vec<Instructi
         root_symbol_table[0].insert(v.0.clone(), v.clone());
     }
 
-    ins.push(Instruction::Label {
-        loc: loc!(0, 0),
-        name: String::from("start"),
-    });
-    let var_final_result = visit(
-        &mut ins,
-        &mut var_types,
-        &mut root_symbol_table,
-        &mut free,
-        &root_ast,
-        None,
-        None,
-    );
+    // Add parameters into symbol table
+    let mut params = Vec::new();
+    let var_final_result = if let Ast::Fn {
+        param_types, block, ..
+    } = root_ast
+    {
+        for (name, param_typ) in param_types {
+            let var = new_var(&mut var_types, &mut free, param_typ.clone());
+            var_types.insert(var.clone(), param_typ.clone());
+            root_symbol_table[0].insert(name.clone(), var.clone());
+            params.push(var);
+        }
+        visit(
+            &mut ins,
+            &mut var_types,
+            &mut root_symbol_table,
+            &mut free,
+            block,
+            None,
+            None,
+        )
+    } else {
+        visit(
+            &mut ins,
+            &mut var_types,
+            &mut root_symbol_table,
+            &mut free,
+            root_ast,
+            None,
+            None,
+        )
+    };
 
     // Print return value of root block if not unit
     match var_types[&var_final_result] {
@@ -168,7 +219,7 @@ fn generate_ir(root_types: HashMap<IRVar, Type>, root_ast: Ast) -> Vec<Instructi
         _ => (),
     }
 
-    ins
+    (params, ins)
 }
 
 fn new_var(var_types: &mut HashMap<IRVar, Type>, free: &mut usize, t: Type) -> IRVar {
@@ -231,6 +282,24 @@ fn visit(
             }
             unreachable!();
         }
+
+        // Ignore function definitions
+        Ast::Fn { .. } => IRVar(String::from("unit")),
+
+        Ast::Return { stat, loc, .. } => {
+            let value = visit(
+                ins,
+                var_types,
+                sym_table,
+                free,
+                stat,
+                b_start_label,
+                b_end_label,
+            );
+            ins.push(Instruction::Return { loc: *loc, value });
+            IRVar(String::from("unit"))
+        }
+
         Ast::BinaryOp {
             left,
             op,
@@ -466,7 +535,7 @@ fn visit(
             var_result
         }
 
-        Ast::Root { stats, .. } => {
+        Ast::Module { stats, .. } => {
             sym_table.push(HashMap::new());
             let mut block_var = IRVar(String::from("unit"));
             for stat in stats {

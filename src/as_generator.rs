@@ -37,6 +37,7 @@ fn init_locals(instructions: &[Instruction]) -> Locals {
             Instruction::Label { .. } => (),
             Instruction::CondJump { .. } => (),
             Instruction::Jump { .. } => (),
+            Instruction::Return { .. } => (),
         }
     }
 
@@ -47,25 +48,46 @@ pub fn emit(lines: &mut Vec<String>, line: String) {
     lines.push(line);
 }
 
-pub fn run_as_gen(instructions: &[Instruction]) -> String {
-    let locals = init_locals(instructions);
+pub fn run_as_gen(instructions: HashMap<String, (Vec<IRVar>, Vec<Instruction>)>) -> String {
+    let mut output = String::from(
+        r#"
+    .extern print_int
+    .extern print_bool
+    .extern read_int
+    .global main
+    .type main, @function
+
+    .section .text
+        "#,
+    );
+    for (name, ins) in instructions.iter() {
+        let fn_output = run_as_gen_function(name, &ins.0, &ins.1);
+        output.push_str(&fn_output);
+    }
+    output
+}
+
+fn run_as_gen_function(name: &String, params: &[IRVar], instructions: &[Instruction]) -> String {
+    let mut locals = init_locals(instructions);
+    for param in params {
+        add_var(&mut locals, param.clone());
+    }
     let space = locals.stack_used;
 
     // lines = []
     let mut lines = svec![
-        "    .extern print_int",
-        "    .extern print_bool",
-        "    .extern read_int",
-        "    .global main",
-        "    .type main, @function",
-        "",
-        "    .section .text",
-        "",
-        "main:",
+        format!("{name}:"),
         "    pushq %rbp",
         "    movq %rsp, %rbp",
         format!("    subq ${space}, %rsp")
     ];
+
+    let fn_regs = ["%rdi", "%rsi", "%rdx", "%rcx", "%r8", "%r9"];
+    for (i, param) in params.iter().enumerate() {
+        let reg = fn_regs[i];
+        let param_ref = &locals.var_to_location[param];
+        emit(&mut lines, format!("movq {reg}, {param_ref}"));
+    }
 
     for ins in instructions {
         emit(&mut lines, format!("# {ins}"));
@@ -130,10 +152,9 @@ pub fn run_as_gen(instructions: &[Instruction]) -> String {
                 fun, args, dest, ..
             } => {
                 if !parse_intrinsics(&locals, &mut lines, ins) {
-                    let regs = ["%rdi", "%rsi", "%rdx", "%rcx", "%r8", "%r9"];
                     for (i, arg) in args.iter().enumerate() {
                         let source_ref = &locals.var_to_location[arg];
-                        let reg = regs[i];
+                        let reg = fn_regs[i];
                         emit(&mut lines, format!("movq {source_ref}, {reg}"));
                     }
 
@@ -143,16 +164,33 @@ pub fn run_as_gen(instructions: &[Instruction]) -> String {
                     emit(&mut lines, format!("movq %rax, {dest_ref}"));
                 }
             }
+
+            Instruction::Return { value, .. } => {
+                let value_ref = &locals.var_to_location[value];
+
+                lines.extend(svec![
+                    format!("movq {value_ref}, %rax"),
+                    "movq %rbp, %rsp",
+                    "popq %rbp",
+                    "ret",
+                ]);
+            }
         }
     }
 
-    lines.extend(svec![
-        "movq $0, %rax",
-        "movq %rbp, %rsp",
-        "popq %rbp",
-        "ret",
-        "" // Add extra newline to stop assembler from complaining
-    ]);
+    if name.as_str() == "main" {
+        lines.extend(svec![
+            "movq $0, %rax",
+            "movq %rbp, %rsp",
+            "popq %rbp",
+            "ret",
+            "" // Add extra newline to stop assembler from complaining
+        ]);
+    } else {
+        // TODO: Add assembly that panics
+        lines.push(String::from("# TODO: Panic"));
+        lines.push(String::from(""));
+    }
 
     lines.join("\n")
 }

@@ -22,7 +22,7 @@ fn interpret(node: &Ast, variables: &mut Vec<HashMap<String, Value>>) -> Value {
         Ast::BoolLiteral { val, .. } => Value::Bool(*val),
         Ast::UnaryMinus { stat, .. } => Value::Int(-interpret_int(stat, variables)),
         Ast::UnaryNot { stat, .. } => Value::Bool(!interpret_bool(stat, variables)),
-        Ast::Root { stats, typ, loc } => interpret(
+        Ast::Module { stats, typ, loc } => interpret(
             &Ast::Block {
                 stats: stats.clone(), // Inoptimal, too lazy to make duplicate code
                 typ: typ.clone(),
